@@ -17,6 +17,7 @@ export interface Project {
 export interface Settings {
   projects: Project[];
   adminEmails: string[];
+  scriptUrl?: string; // URL Google Apps Script
 }
 
 export interface TimeLog {
@@ -29,7 +30,7 @@ export interface TimeLog {
   startTime: string;
   initialStartTime?: string;
   endTime: string;
-  totalTime: string; // duration in HH:mm:ss
+  totalTime: string;
   timestamp: number;
   isPaused?: boolean;
   accumulatedMs?: number;

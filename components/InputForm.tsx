@@ -15,13 +15,11 @@ export const InputForm: React.FC<InputFormProps> = ({ settings, onStart }) => {
     jobSection: ''
   });
 
-  // Find selected project object
   const selectedProjectObj = useMemo(() => 
     settings.projects.find(p => p.name === formData.project),
     [settings.projects, formData.project]
   );
 
-  // Find selected panel object within the project
   const selectedPanelObj = useMemo(() => 
     selectedProjectObj?.panels.find(p => p.name === formData.panelName),
     [selectedProjectObj, formData.panelName]
@@ -54,88 +52,125 @@ export const InputForm: React.FC<InputFormProps> = ({ settings, onStart }) => {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden max-w-2xl mx-auto">
-      <div className="bg-blue-600 px-8 py-4 text-white">
-        <h3 className="text-lg font-semibold uppercase tracking-wider">Start New Task</h3>
+    <div className="space-y-6 max-w-2xl mx-auto">
+      {/* TANDA KONEKSI - CLOUD STATUS BADGE */}
+      <div className="flex justify-center">
+        <div className={`flex items-center space-x-3 px-5 py-2.5 rounded-2xl border-2 transition-all duration-500 ${
+          settings.scriptUrl 
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm shadow-emerald-100' 
+            : 'bg-amber-50 text-amber-700 border-amber-200 shadow-sm shadow-amber-100'
+        }`}>
+          <div className="relative flex h-3 w-3">
+            {settings.scriptUrl && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            )}
+            <span className={`relative inline-flex rounded-full h-3 w-3 ${settings.scriptUrl ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[11px] font-black uppercase tracking-wider leading-none">
+              {settings.scriptUrl ? 'Sistem Terkoneksi' : 'Mode Offline / Lokal'}
+            </span>
+            <span className="text-[9px] opacity-70 font-medium mt-0.5">
+              {settings.scriptUrl ? 'Data akan otomatis terkirim ke Google Sheets' : 'URL Database belum diatur di menu Settings'}
+            </span>
+          </div>
+          {settings.scriptUrl && (
+            <div className="bg-emerald-500 text-white rounded-full p-0.5">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          )}
+        </div>
       </div>
-      <form onSubmit={handleSubmit} className="p-8 space-y-6">
-        <div className="grid grid-cols-1 gap-6">
-          {/* Project Selection */}
+
+      <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+        <div className="bg-slate-900 px-8 py-6 text-white flex justify-between items-center">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Project</label>
-            <select 
-              className="w-full px-4 py-3 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 transition-all bg-slate-50"
-              value={formData.project}
-              onChange={(e) => handleProjectChange(e.target.value)}
-              required
+            <h3 className="text-sm font-black uppercase tracking-[0.2em] text-blue-400">Time Sheet EMT</h3>
+            <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Input Pekerjaan Baru</p>
+          </div>
+          <div className="bg-white/10 p-2.5 rounded-2xl backdrop-blur-md">
+            <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          </div>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-8 space-y-7">
+          <div className="grid grid-cols-1 gap-7">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Pilih Project Utama</label>
+              <select 
+                className="w-full px-6 py-4 rounded-2xl border-2 border-slate-50 outline-none focus:border-blue-500 transition-all bg-slate-50 text-sm font-bold text-slate-800"
+                value={formData.project}
+                onChange={(e) => handleProjectChange(e.target.value)}
+                required
+              >
+                <option value="">-- List Project --</option>
+                {settings.projects.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Nama Panel</label>
+                <select 
+                  className={`w-full px-6 py-4 rounded-2xl border-2 border-slate-50 outline-none focus:border-blue-500 transition-all text-sm font-bold ${!formData.project ? 'bg-slate-100 cursor-not-allowed opacity-60' : 'bg-slate-50 text-slate-800'}`}
+                  value={formData.panelName}
+                  onChange={(e) => handlePanelChange(e.target.value)}
+                  disabled={!formData.project}
+                  required
+                >
+                  <option value="">-- List Panel --</option>
+                  {selectedProjectObj?.panels.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Kode Unik Panel</label>
+                <select 
+                  className={`w-full px-6 py-4 rounded-2xl border-2 border-slate-50 outline-none focus:border-blue-500 transition-all text-sm font-mono ${!formData.panelName ? 'bg-slate-100 cursor-not-allowed opacity-60' : 'bg-slate-50 text-slate-800 font-bold'}`}
+                  value={formData.panelCode}
+                  onChange={(e) => setFormData(prev => ({ ...prev, panelCode: e.target.value }))}
+                  disabled={!formData.panelName}
+                  required
+                >
+                  <option value="">-- List Kode --</option>
+                  {selectedPanelObj?.codes.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Bagian Pengerjaan</label>
+              <input 
+                type="text"
+                placeholder="Contoh: Wiring Power, Marking Label..."
+                className="w-full px-6 py-4 rounded-2xl border-2 border-slate-50 outline-none focus:border-blue-500 transition-all bg-slate-50 text-sm font-bold text-slate-800"
+                value={formData.jobSection}
+                onChange={(e) => setFormData(prev => ({ ...prev, jobSection: e.target.value }))}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="pt-6 border-t border-slate-50">
+            <button 
+              type="submit"
+              disabled={!isValid}
+              className={`w-full py-5 rounded-[2rem] font-black text-lg transition-all shadow-2xl flex items-center justify-center space-x-3 active:scale-[0.97] ${
+                isValid 
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/40 translate-y-0' 
+                  : 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none translate-y-0'
+              }`}
             >
-              <option value="">Select Project</option>
-              {settings.projects.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-            </select>
+              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+              </svg>
+              <span>MULAI KERJA</span>
+            </button>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Panel Name - Filtered by Project */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Panel Name</label>
-              <select 
-                className={`w-full px-4 py-3 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 transition-all ${!formData.project ? 'bg-slate-100 cursor-not-allowed opacity-60' : 'bg-slate-50'}`}
-                value={formData.panelName}
-                onChange={(e) => handlePanelChange(e.target.value)}
-                disabled={!formData.project}
-                required
-              >
-                <option value="">Select Panel Name</option>
-                {selectedProjectObj?.panels.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-              </select>
-            </div>
-
-            {/* Panel Code - Filtered by Panel Name */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Panel Code</label>
-              <select 
-                className={`w-full px-4 py-3 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 transition-all ${!formData.panelName ? 'bg-slate-100 cursor-not-allowed opacity-60' : 'bg-slate-50'}`}
-                value={formData.panelCode}
-                onChange={(e) => setFormData(prev => ({ ...prev, panelCode: e.target.value }))}
-                disabled={!formData.panelName}
-                required
-              >
-                <option value="">Select Code</option>
-                {selectedPanelObj?.codes.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Job Section */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Job Section (Bagian Pengerjaan)</label>
-            <input 
-              type="text"
-              placeholder="e.g. Wiring, Component Mounting"
-              className="w-full px-4 py-3 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 transition-all bg-slate-50"
-              value={formData.jobSection}
-              onChange={(e) => setFormData(prev => ({ ...prev, jobSection: e.target.value }))}
-              required
-            />
-          </div>
-        </div>
-
-        <div className="pt-4 border-t border-slate-100">
-          <button 
-            type="submit"
-            disabled={!isValid}
-            className={`w-full py-4 rounded-xl font-bold text-lg transition-all shadow-lg flex items-center justify-center space-x-2 ${
-              isValid ? 'bg-green-600 hover:bg-green-700 text-white hover:shadow-green-500/20' : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-            }`}
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>Mulai Kerja (Start Session)</span>
-          </button>
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
   );
 };

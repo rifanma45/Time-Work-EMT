@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { User, Settings, TimeLog, AppState } from './types';
 import { INITIAL_SETTINGS, STORAGE_KEYS, ADMIN_EMAIL } from './constants';
 import { Login } from './components/Login';
@@ -23,8 +23,6 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
   });
 
-  // Catatan: Di Vercel production, state 'history' ini harus di-sync ke Database (Supabase/Firebase)
-  // agar data dari user A bisa muncul di browser Admin B secara real-time.
   const [history, setHistory] = useState<TimeLog[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.HISTORY);
     return saved ? JSON.parse(saved) : [];
@@ -35,11 +33,13 @@ const App: React.FC = () => {
     activeLog: null
   });
 
+  const [isSyncing, setIsSyncing] = useState(false);
   const [insight, setInsight] = useState<string | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [editingLog, setEditingLog] = useState<TimeLog | null>(null);
 
+  // Persistence
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }, [settings]);
@@ -48,12 +48,13 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
   }, [history]);
 
+  // Security and State Management
   useEffect(() => {
     if (user) {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       const isAdmin = settings.adminEmails.some(a => a.toLowerCase() === user.email.toLowerCase()) || user.email === ADMIN_EMAIL;
       
-      // Keamanan: Jika bukan admin tapi mencoba buka Spreadsheet, lempar balik ke Input
+      // Keamanan: Redirect non-admin jika mencoba masuk ke spreadsheet/settings
       if (!isAdmin && (state.currentStep === 'history' || state.currentStep === 'settings')) {
         setState(prev => ({ ...prev, currentStep: 'input' }));
       }
@@ -61,6 +62,42 @@ const App: React.FC = () => {
       localStorage.removeItem(STORAGE_KEYS.USER);
     }
   }, [user, state.currentStep, settings.adminEmails]);
+
+  // Cloud Sync Functions
+  const refreshFromCloud = useCallback(async () => {
+    if (!settings.scriptUrl) {
+      alert("Masukkan URL Google Apps Script di menu Settings terlebih dahulu.");
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const response = await fetch(settings.scriptUrl);
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        setHistory(data);
+      }
+    } catch (err) {
+      console.error("Cloud Sync Error:", err);
+      alert("Gagal mengambil data dari Google Drive. Pastikan URL Apps Script benar.");
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [settings.scriptUrl]);
+
+  const pushToCloud = async (log: TimeLog) => {
+    if (!settings.scriptUrl) return;
+    try {
+      // Menggunakan no-cors karena Apps Script seringkali bermasalah dengan CORS preflight
+      await fetch(settings.scriptUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(log)
+      });
+    } catch (err) {
+      console.error("Cloud Push Error:", err);
+    }
+  };
 
   const handleLogin = (email: string) => {
     const isAdmin = settings.adminEmails.some(admin => admin.toLowerCase() === email.toLowerCase()) || email === ADMIN_EMAIL;
@@ -117,7 +154,7 @@ const App: React.FC = () => {
     }));
   };
 
-  const stopTracking = (endTime: string, totalTime: string) => {
+  const stopTracking = async (endTime: string, totalTime: string) => {
     if (!state.activeLog) return;
     
     const newLog: TimeLog = {
@@ -131,9 +168,11 @@ const App: React.FC = () => {
       accumulatedMs: 0
     };
     
-    // Simpan ke history kolektif
     setHistory(prev => [newLog, ...prev]);
     setState({ currentStep: 'input', activeLog: null });
+    
+    // Otomatis kirim ke Google Sheets
+    await pushToCloud(newLog);
     generateInsights([newLog, ...history]);
   };
 
@@ -153,11 +192,11 @@ const App: React.FC = () => {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Analisis logs kerja EMT: ${JSON.stringify(currentHistory.slice(0, 3))}. Berikan 1 tips produktivitas singkat (10 kata) untuk teknisi panel.`,
+        contents: `Analisis data teknisi ini: ${JSON.stringify(currentHistory.slice(0, 3))}. Berikan 1 pesan singkat motivasi untuk tim EMT (max 10 kata).`,
       });
       setInsight(response.text);
     } catch (err) {
-      console.error("AI Insight Error:", err);
+      console.error("AI Error:", err);
     }
   };
 
@@ -182,47 +221,77 @@ const App: React.FC = () => {
       <main className="flex-1 p-6 md:p-10 overflow-y-auto">
         <header className="mb-8 flex justify-between items-start">
           <div className="flex items-start space-x-3">
-            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 bg-white border border-slate-200 rounded-lg text-slate-600 shadow-sm">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="md:hidden p-2 bg-white border border-slate-200 rounded-lg text-slate-600 shadow-sm"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
             </button>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-slate-900 leading-tight">
-                {state.currentStep === 'input' && 'Input Task Baru'}
-                {state.currentStep === 'active' && 'Task Berjalan'}
-                {state.currentStep === 'history' && 'Master Spreadsheet EMT'}
-                {state.currentStep === 'settings' && 'System Config'}
+                {state.currentStep === 'input' && 'Input Pekerjaan'}
+                {state.currentStep === 'active' && 'Sesi Berjalan'}
+                {state.currentStep === 'history' && 'Google Master Sheet'}
+                {state.currentStep === 'settings' && 'Konfigurasi Sistem'}
               </h1>
               <p className="text-slate-500 mt-1 text-sm">
-                Halo, {user.email.split('@')[0]} {isAdmin && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold ml-2">ADMIN</span>}
+                EMT Time Keeper v2.0 {isAdmin && <span className="text-blue-600 font-bold ml-1">• Mode Admin Aktif</span>}
               </p>
             </div>
           </div>
           
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 md:space-x-4">
+            {state.currentStep === 'history' && isAdmin && (
+              <button 
+                onClick={refreshFromCloud}
+                disabled={isSyncing || !settings.scriptUrl}
+                className={`p-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 shadow-sm hover:bg-slate-50 transition-all ${isSyncing ? 'animate-spin' : 'active:scale-95'}`}
+                title="Sync dengan Google Sheets"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            )}
+            
             {insight && (
-              <div className="hidden lg:block bg-white border border-slate-200 px-4 py-2 rounded-xl text-xs text-slate-600 shadow-sm">
-                💡 {insight}
+              <div className="hidden lg:block bg-blue-50 border border-blue-100 px-4 py-2 rounded-xl text-xs text-blue-700 italic max-w-sm shadow-sm animate-in fade-in slide-in-from-right-4">
+                ✨ {insight}
               </div>
             )}
-            <button onClick={() => setIsShareModalOpen(true)} className="bg-blue-600 text-white p-2 rounded-lg shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 100-2.684 3 3 0 000 2.684zm0 9a3 3 0 100-2.684 3 3 0 000 2.684z" /></svg>
+            
+            <button 
+              onClick={() => setIsShareModalOpen(true)}
+              className="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 100-2.684 3 3 0 000 2.684zm0 9a3 3 0 100-2.684 3 3 0 000 2.684z" />
+              </svg>
             </button>
           </div>
         </header>
 
         <div className="max-w-6xl mx-auto">
-          {state.currentStep === 'input' && <InputForm settings={settings} onStart={startTracking} />}
+          {state.currentStep === 'input' && (
+            <InputForm settings={settings} onStart={startTracking} />
+          )}
+          
           {state.currentStep === 'active' && state.activeLog && (
             <ActiveTracker 
               activeLog={state.activeLog} 
               onStop={stopTracking} 
               onPause={handlePause}
               onResume={handleResume}
+              isCloudEnabled={!!settings.scriptUrl}
             />
           )}
+          
           {state.currentStep === 'history' && isAdmin && (
             <HistoryTable history={history} onEdit={setEditingLog} onDelete={handleDeleteLog} />
           )}
+          
           {state.currentStep === 'settings' && isAdmin && (
             <SettingsPanel settings={settings} onUpdateSettings={setSettings} currentUserEmail={user.email} />
           )}
