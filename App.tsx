@@ -38,6 +38,7 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [editingLog, setEditingLog] = useState<TimeLog | null>(null);
 
+  // Persistence
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }, [settings]);
@@ -46,16 +47,19 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
   }, [history]);
 
+  // Security Guard: Ensure non-admins cannot access admin steps
   useEffect(() => {
     if (user) {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-      if (!user.isAdmin && (state.currentStep === 'history' || state.currentStep === 'settings')) {
+      const isAdmin = settings.adminEmails.some(a => a.toLowerCase() === user.email.toLowerCase()) || user.email === ADMIN_EMAIL;
+      
+      if (!isAdmin && (state.currentStep === 'history' || state.currentStep === 'settings')) {
         setState(prev => ({ ...prev, currentStep: 'input' }));
       }
     } else {
       localStorage.removeItem(STORAGE_KEYS.USER);
     }
-  }, [user, state.currentStep]);
+  }, [user, state.currentStep, settings.adminEmails]);
 
   const handleLogin = (email: string) => {
     const isAdmin = settings.adminEmails.some(admin => admin.toLowerCase() === email.toLowerCase()) || email === ADMIN_EMAIL;
@@ -115,18 +119,18 @@ const App: React.FC = () => {
   const stopTracking = (endTime: string, totalTime: string) => {
     if (!state.activeLog) return;
     
-    // We use the original initialStartTime for the log record
     const newLog: TimeLog = {
       ...(state.activeLog as TimeLog),
       id: Math.random().toString(36).substr(2, 9),
       startTime: state.activeLog.initialStartTime || state.activeLog.startTime!,
       endTime,
-      totalTime, // totalTime already excludes pauses as it comes from ActiveTracker's elapsed state
+      totalTime,
       timestamp: Date.now(),
       isPaused: false,
       accumulatedMs: 0
     };
     
+    // Add to shared collective history
     setHistory(prev => [newLog, ...prev]);
     setState({ currentStep: user?.isAdmin ? 'history' : 'input', activeLog: null });
     generateInsights([newLog, ...history]);
@@ -138,7 +142,7 @@ const App: React.FC = () => {
   };
 
   const handleDeleteLog = (id: string) => {
-    if (window.confirm('Hapus data ini?')) {
+    if (window.confirm('Hapus data pengerjaan ini secara permanen?')) {
       setHistory(prev => prev.filter(log => log.id !== id));
     }
   };
@@ -148,8 +152,8 @@ const App: React.FC = () => {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Based on these recent work logs for engineering work: ${JSON.stringify(currentHistory.slice(0, 5))}. 
-                   Give a very short, motivating sentence (max 15 words) about productivity or progress for the EMT team.`,
+        contents: `Analisis logs kerja EMT ini: ${JSON.stringify(currentHistory.slice(0, 5))}. 
+                   Berikan satu kalimat penyemangat singkat (max 12 kata) dalam Bahasa Indonesia untuk tim engineering.`,
       });
       setInsight(response.text);
     } catch (err) {
@@ -161,12 +165,14 @@ const App: React.FC = () => {
     return <Login onLogin={handleLogin} />;
   }
 
+  const isAdmin = settings.adminEmails.some(a => a.toLowerCase() === user.email.toLowerCase()) || user.email === ADMIN_EMAIL;
+
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar 
         currentStep={state.currentStep} 
         onChangeStep={(step) => setState(prev => ({ ...prev, currentStep: step as any }))} 
-        isAdmin={user.isAdmin}
+        isAdmin={isAdmin}
         onLogout={handleLogout}
         userEmail={user.email}
         isOpen={isSidebarOpen}
@@ -176,30 +182,30 @@ const App: React.FC = () => {
       <main className="flex-1 p-6 md:p-10 overflow-y-auto">
         <header className="mb-8 flex justify-between items-start">
           <div className="flex items-start space-x-3">
-            {user.isAdmin && (
-              <button 
-                onClick={() => setIsSidebarOpen(true)}
-                className="md:hidden p-2 bg-white border border-slate-200 rounded-lg text-slate-600 shadow-sm"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            )}
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="md:hidden p-2 bg-white border border-slate-200 rounded-lg text-slate-600 shadow-sm"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-slate-900 leading-tight">
-                {state.currentStep === 'input' && 'Track New Entry'}
-                {state.currentStep === 'active' && 'Current Job Running'}
-                {state.currentStep === 'history' && 'Timesheet Spreadsheet'}
-                {state.currentStep === 'settings' && 'System Configuration'}
+                {state.currentStep === 'input' && 'Input Pekerjaan Baru'}
+                {state.currentStep === 'active' && 'Pekerjaan Sedang Berjalan'}
+                {state.currentStep === 'history' && 'Kolektif Timesheet EMT'}
+                {state.currentStep === 'settings' && 'Konfigurasi Sistem'}
               </h1>
-              <p className="text-slate-500 mt-1 text-sm md:text-base">Hello, {user.email.split('@')[0]}</p>
+              <p className="text-slate-500 mt-1 text-sm md:text-base">
+                Selamat bekerja, {user.email.split('@')[0]} {isAdmin && <span className="text-blue-600 font-bold ml-1">(Admin Mode)</span>}
+              </p>
             </div>
           </div>
           
           <div className="flex items-center space-x-2 md:space-x-4">
             {insight && (
-              <div className="hidden lg:block bg-blue-50 border border-blue-100 px-4 py-2 rounded-lg text-sm text-blue-700 italic max-w-sm">
+              <div className="hidden lg:block bg-blue-50 border border-blue-100 px-4 py-2 rounded-lg text-sm text-blue-700 italic max-w-sm shadow-sm">
                 ✨ "{insight}"
               </div>
             )}
@@ -231,11 +237,11 @@ const App: React.FC = () => {
             />
           )}
           
-          {state.currentStep === 'history' && user.isAdmin && (
+          {state.currentStep === 'history' && isAdmin && (
             <HistoryTable history={history} onEdit={setEditingLog} onDelete={handleDeleteLog} />
           )}
           
-          {state.currentStep === 'settings' && user.isAdmin && (
+          {state.currentStep === 'settings' && isAdmin && (
             <SettingsPanel settings={settings} onUpdateSettings={setSettings} currentUserEmail={user.email} />
           )}
         </div>
