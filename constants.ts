@@ -2,6 +2,8 @@
 export const ADMIN_EMAIL = 'rifanma45@gmail.com';
 
 export const INITIAL_SETTINGS = {
+  // TEMPELKAN URL GOOGLE APPS SCRIPT ANDA DI SINI AGAR SEMUA USER OTOMATIS TERKONEKSI
+  scriptUrl: '', 
   projects: [
     {
       name: 'Project Alpha',

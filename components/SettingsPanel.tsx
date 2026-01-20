@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Settings, Project, Panel } from '../types';
-import { ADMIN_EMAIL } from '../constants';
+import { ADMIN_EMAIL, INITIAL_SETTINGS } from '../constants';
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -14,7 +14,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
   const [selectedPanelId, setSelectedPanelId] = useState<number | null>(null);
   const [newItem, setNewItem] = useState('');
   const [newAdmin, setNewAdmin] = useState('');
-  const [scriptUrl, setScriptUrl] = useState(settings.scriptUrl || '');
   const [isTesting, setIsTesting] = useState(false);
 
   const projects = settings.projects;
@@ -24,27 +23,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
 
   const isSuperAdmin = currentUserEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
-  const handleSaveCloud = () => {
-    if (!scriptUrl.startsWith('https://script.google.com')) {
-      alert('URL tidak valid! Pastikan diawali dengan https://script.google.com');
-      return;
-    }
-    onUpdateSettings({ ...settings, scriptUrl });
-    alert('URL Berhasil disimpan!');
-  };
-
   const testConnection = async () => {
-    if (!scriptUrl) return alert("Masukkan URL terlebih dahulu");
+    if (!settings.scriptUrl) return alert("URL Master Database belum diatur di constants.ts");
     setIsTesting(true);
     try {
-      const res = await fetch(scriptUrl);
+      const res = await fetch(settings.scriptUrl);
       if (res.ok || res.type === 'opaque') {
-        alert("✅ KONEKSI BERHASIL!\nAplikasi sudah bisa mengirim data ke Google Sheets Anda.");
+        alert("✅ KONEKSI MASTER BERHASIL!\nSemua user sekarang terhubung ke Google Sheets.");
       } else {
-        alert("❌ KONEKSI GAGAL\nPeriksa kembali URL atau pastikan akses Deployment adalah 'Anyone'.");
+        alert("❌ KONEKSI GAGAL\nPastikan URL di constants.ts benar dan Deployment Apps Script disetel ke 'Anyone'.");
       }
     } catch (e) {
-      alert("⚠️ PERHATIAN:\nKoneksi mungkin terhambat CORS, tapi jika Anda sudah 'Allow' akses di Google Script dan set ke 'Anyone', data akan tetap masuk saat 'Stop Kerja'.");
+      alert("⚠️ INFO KONEKSI:\nJika Anda sudah set Apps Script ke 'Anyone', data akan tetap masuk secara otomatis saat teknisi mengklik 'Stop Kerja'.");
     } finally {
       setIsTesting(false);
     }
@@ -74,6 +64,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
   };
 
   const handleAddAdmin = () => {
+    if (!isSuperAdmin) return;
     if (!newAdmin.trim() || !newAdmin.includes('@')) return;
     if (adminEmails.some(a => a.toLowerCase() === newAdmin.toLowerCase())) {
       alert('Email ini sudah menjadi admin.');
@@ -85,6 +76,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
   };
 
   const removeAdmin = (email: string) => {
+    if (!isSuperAdmin) return;
     if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return;
     const updated = { ...settings, adminEmails: adminEmails.filter(a => a !== email) };
     onUpdateSettings(updated);
@@ -92,7 +84,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
 
   return (
     <div className="space-y-10 pb-24">
-      {/* CLOUD CONFIGURATION SECTION */}
+      {/* CLOUD CONNECTION STATUS SECTION */}
       <div className="bg-white rounded-[2rem] shadow-xl border-4 border-blue-500/10 overflow-hidden">
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6 text-white">
           <div className="flex items-center justify-between">
@@ -101,52 +93,42 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
               </div>
               <div>
-                <h3 className="font-black uppercase tracking-widest text-lg">Konfigurasi Database</h3>
-                <p className="text-blue-100 text-xs">Hubungkan aplikasi ke Google Drive Anda</p>
+                <h3 className="font-black uppercase tracking-widest text-lg">Master Database Sheet</h3>
+                <p className="text-blue-100 text-xs">Konfigurasi Terpusat EMT</p>
               </div>
             </div>
-            <button 
-              onClick={testConnection}
-              disabled={isTesting}
-              className="bg-white text-blue-600 px-6 py-2 rounded-xl text-sm font-black hover:bg-blue-50 transition-all shadow-lg active:scale-95"
-            >
-              {isTesting ? 'Mengecek...' : 'Uji Koneksi'}
-            </button>
+            {isSuperAdmin && (
+              <button 
+                onClick={testConnection}
+                disabled={isTesting}
+                className="bg-white text-blue-600 px-6 py-2 rounded-xl text-sm font-black hover:bg-blue-50 transition-all shadow-lg active:scale-95"
+              >
+                {isTesting ? 'Checking...' : 'Cek Koneksi'}
+              </button>
+            )}
           </div>
         </div>
         
         <div className="p-8">
-          <div className="mb-8">
-            <label className="block text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">MASUKKAN URL APPS SCRIPT DISINI:</label>
-            <div className="flex flex-col gap-4">
-              <input 
-                type="text"
-                className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 outline-none focus:border-blue-500 bg-slate-50 text-sm font-mono shadow-inner"
-                placeholder="https://script.google.com/macros/s/AKfy.../exec"
-                value={scriptUrl}
-                onChange={(e) => setScriptUrl(e.target.value)}
-              />
-              <button 
-                onClick={handleSaveCloud}
-                className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-sm hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/30 active:scale-95 flex items-center justify-center space-x-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
-                <span>SIMPAN & AKTIFKAN DATABASE</span>
-              </button>
+          <div className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status Koneksi Global:</span>
+              <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tighter ${settings.scriptUrl ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                {settings.scriptUrl ? 'AKTIF & TERKONEKSI' : 'TIDAK TERKONEKSI'}
+              </div>
             </div>
-          </div>
+            
+            <div className="p-4 bg-white rounded-xl border border-slate-200 font-mono text-[10px] text-slate-500 break-all shadow-inner">
+              {settings.scriptUrl || 'URL Database belum diisi di file constants.ts'}
+            </div>
 
-          <div className="bg-slate-900 rounded-2xl p-6 text-slate-300">
-            <h4 className="text-blue-400 font-bold text-sm mb-3 flex items-center">
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              Petunjuk Mendapatkan URL
-            </h4>
-            <div className="space-y-3 text-xs leading-relaxed opacity-90">
-              <p>1. Di Google Sheets, buka <strong>Extensions</strong> &gt; <strong>Apps Script</strong>.</p>
-              <p>2. Paste kode jembatan database, lalu klik <strong>Deploy</strong> &gt; <strong>New Deployment</strong>.</p>
-              <p>3. Pilih <strong>Web App</strong>. Set "Execute as" ke <strong>Me</strong> dan "Who has access" ke <strong>Anyone</strong>.</p>
-              <p>4. Copy <strong>Web App URL</strong> yang dihasilkan dan tempel di kolom atas.</p>
-            </div>
+            {isSuperAdmin && (
+              <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                <p className="text-xs text-blue-700 font-bold leading-relaxed">
+                  💡 <strong>INSTRUKSI ADMIN:</strong> Untuk mengubah URL ini bagi semua user, buka file <code>constants.ts</code> di source code dan perbarui variabel <code>scriptUrl</code>. Setelah itu, semua akun teknisi akan otomatis menggunakan URL baru tersebut.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -9,17 +9,20 @@ interface ShareModalProps {
 export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
-  const appUrl = window.location.href;
+  const getShareUrl = () => {
+    return window.location.origin + window.location.pathname;
+  };
 
   const handleShare = async (type: 'install' | 'web') => {
+    const fullUrl = getShareUrl();
     const text = type === 'install' 
-      ? "Halo! Gunakan link ini untuk instal aplikasi Time Sheet EMT di handphone kamu (Klik 'Add to Home Screen'): "
+      ? "Halo! Gunakan link ini untuk instal aplikasi Time Sheet EMT di handphone kamu: "
       : "Link akses web Time Sheet EMT: ";
     
     const shareData = {
       title: 'Time Sheet EMT',
-      text: text + appUrl,
-      url: appUrl,
+      text: text + fullUrl,
+      url: fullUrl,
     };
 
     if (navigator.share) {
@@ -30,8 +33,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose }) => {
       }
     } else {
       try {
-        await navigator.clipboard.writeText(text + appUrl);
-        alert('Link Berhasil Disalin!');
+        await navigator.clipboard.writeText(text + fullUrl);
+        alert('Link Berhasil Disalin ke Clipboard!');
       } catch (err) {
         alert('Gagal menyalin link.');
       }
@@ -54,7 +57,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Option 1: Share for Installation */}
           <button 
             onClick={() => handleShare('install')}
             className="w-full flex items-center p-4 border border-blue-100 bg-blue-50 rounded-2xl hover:bg-blue-100 transition-all text-left group"
@@ -66,14 +68,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose }) => {
             </div>
             <div>
               <p className="font-bold text-blue-900">Share & Instal Mobile</p>
-              <p className="text-sm text-blue-700 opacity-80">Link untuk instalasi aplikasi di handphone.</p>
+              <p className="text-sm text-blue-700 opacity-80">Link bersih tanpa parameter config.</p>
             </div>
-            <svg className="w-5 h-5 ml-auto text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-            </svg>
           </button>
 
-          {/* Option 2: Share for Web Access */}
           <button 
             onClick={() => handleShare('web')}
             className="w-full flex items-center p-4 border border-slate-200 bg-slate-50 rounded-2xl hover:bg-slate-100 transition-all text-left group"
@@ -85,17 +83,15 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose }) => {
             </div>
             <div>
               <p className="font-bold text-slate-800">Share Akses Web</p>
-              <p className="text-sm text-slate-500">Link standar untuk membuka di browser web.</p>
+              <p className="text-sm text-slate-500">Link standar untuk browser laptop.</p>
             </div>
-            <svg className="w-5 h-5 ml-auto text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-            </svg>
           </button>
         </div>
 
-        <div className="bg-slate-50 p-6">
-          <p className="text-xs text-slate-400 leading-relaxed text-center">
-            Aplikasi ini dapat diinstal di Android/iOS dengan membuka link di browser lalu pilih <strong>"Tambahkan ke Layar Utama"</strong> (Add to Home Screen).
+        <div className="bg-slate-50 p-6 text-center">
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Centralized Config</p>
+          <p className="text-[9px] text-slate-400 leading-relaxed italic">
+            Konfigurasi database Master sekarang tertanam di dalam aplikasi. Cukup bagikan link di atas untuk semua tim.
           </p>
         </div>
       </div>

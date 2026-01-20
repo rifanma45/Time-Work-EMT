@@ -20,7 +20,19 @@ const App: React.FC = () => {
 
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
+    let currentSettings: Settings = saved ? JSON.parse(saved) : INITIAL_SETTINGS;
+    
+    /**
+     * MASTER OVERRIDE LOGIC:
+     * Jika Admin sudah mengisi scriptUrl di file constants.ts, 
+     * maka paksa semua user menggunakan URL tersebut.
+     * Ini memastikan "Sekali Setting oleh Admin, Semua User Ikut".
+     */
+    if (INITIAL_SETTINGS.scriptUrl && INITIAL_SETTINGS.scriptUrl.trim() !== '') {
+      currentSettings.scriptUrl = INITIAL_SETTINGS.scriptUrl;
+    }
+    
+    return currentSettings;
   });
 
   const [history, setHistory] = useState<TimeLog[]>(() => {
@@ -54,7 +66,6 @@ const App: React.FC = () => {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       const isAdmin = settings.adminEmails.some(a => a.toLowerCase() === user.email.toLowerCase()) || user.email === ADMIN_EMAIL;
       
-      // Keamanan: Redirect non-admin jika mencoba masuk ke spreadsheet/settings
       if (!isAdmin && (state.currentStep === 'history' || state.currentStep === 'settings')) {
         setState(prev => ({ ...prev, currentStep: 'input' }));
       }
@@ -66,7 +77,7 @@ const App: React.FC = () => {
   // Cloud Sync Functions
   const refreshFromCloud = useCallback(async () => {
     if (!settings.scriptUrl) {
-      alert("Masukkan URL Google Apps Script di menu Settings terlebih dahulu.");
+      alert("Database belum dikonfigurasi oleh Admin di constants.ts.");
       return;
     }
     setIsSyncing(true);
@@ -78,7 +89,7 @@ const App: React.FC = () => {
       }
     } catch (err) {
       console.error("Cloud Sync Error:", err);
-      alert("Gagal mengambil data dari Google Drive. Pastikan URL Apps Script benar.");
+      alert("Gagal mengambil data. Pastikan URL Apps Script sudah benar dan disetel ke 'Anyone'.");
     } finally {
       setIsSyncing(false);
     }
@@ -87,7 +98,6 @@ const App: React.FC = () => {
   const pushToCloud = async (log: TimeLog) => {
     if (!settings.scriptUrl) return;
     try {
-      // Menggunakan no-cors karena Apps Script seringkali bermasalah dengan CORS preflight
       await fetch(settings.scriptUrl, {
         method: 'POST',
         mode: 'no-cors',
@@ -171,7 +181,6 @@ const App: React.FC = () => {
     setHistory(prev => [newLog, ...prev]);
     setState({ currentStep: 'input', activeLog: null });
     
-    // Otomatis kirim ke Google Sheets
     await pushToCloud(newLog);
     generateInsights([newLog, ...history]);
   };
@@ -251,7 +260,7 @@ const App: React.FC = () => {
                 title="Sync dengan Google Sheets"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357-2H15" />
                 </svg>
               </button>
             )}
