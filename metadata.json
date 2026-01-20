@@ -1,0 +1,7 @@
+{
+  "name": "Time Work EMT",
+  "description": "A professional time tracking application for EMT engineering teams to manage project-based work hours, panel installations, and job sections with administrative control over dropdown options.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
