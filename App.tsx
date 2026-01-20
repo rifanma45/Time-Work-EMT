@@ -22,12 +22,7 @@ const App: React.FC = () => {
     const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     let currentSettings: Settings = saved ? JSON.parse(saved) : INITIAL_SETTINGS;
     
-    /**
-     * MASTER OVERRIDE LOGIC:
-     * Jika Admin sudah mengisi scriptUrl di file constants.ts, 
-     * maka paksa semua user menggunakan URL tersebut.
-     * Ini memastikan "Sekali Setting oleh Admin, Semua User Ikut".
-     */
+    // MASTER SYNC: Jika ada URL di constants.ts, ini adalah otoritas tertinggi
     if (INITIAL_SETTINGS.scriptUrl && INITIAL_SETTINGS.scriptUrl.trim() !== '') {
       currentSettings.scriptUrl = INITIAL_SETTINGS.scriptUrl;
     }
@@ -50,6 +45,16 @@ const App: React.FC = () => {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [editingLog, setEditingLog] = useState<TimeLog | null>(null);
+
+  // Menjaga agar scriptUrl tetap sinkron dengan konstanta (Master Otoritas)
+  useEffect(() => {
+    if (INITIAL_SETTINGS.scriptUrl && settings.scriptUrl !== INITIAL_SETTINGS.scriptUrl) {
+      setSettings(prev => ({
+        ...prev,
+        scriptUrl: INITIAL_SETTINGS.scriptUrl
+      }));
+    }
+  }, [settings.scriptUrl]);
 
   // Persistence
   useEffect(() => {
@@ -77,7 +82,7 @@ const App: React.FC = () => {
   // Cloud Sync Functions
   const refreshFromCloud = useCallback(async () => {
     if (!settings.scriptUrl) {
-      alert("Database belum dikonfigurasi oleh Admin di constants.ts.");
+      alert("Database belum dikonfigurasi.");
       return;
     }
     setIsSyncing(true);
@@ -89,7 +94,7 @@ const App: React.FC = () => {
       }
     } catch (err) {
       console.error("Cloud Sync Error:", err);
-      alert("Gagal mengambil data. Pastikan URL Apps Script sudah benar dan disetel ke 'Anyone'.");
+      alert("Gagal mengambil data. Pastikan URL Apps Script sudah benar dan akses disetel ke 'Anyone'.");
     } finally {
       setIsSyncing(false);
     }

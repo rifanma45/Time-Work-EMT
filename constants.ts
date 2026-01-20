@@ -2,8 +2,14 @@
 export const ADMIN_EMAIL = 'rifanma45@gmail.com';
 
 export const INITIAL_SETTINGS = {
-  // TEMPELKAN URL GOOGLE APPS SCRIPT ANDA DI SINI AGAR SEMUA USER OTOMATIS TERKONEKSI
-  scriptUrl: '', 
+  /**
+   * MASTER CONFIGURATION
+   * URL Google Apps Script Web App yang sudah dikoneksikan.
+   * Begitu diisi, SEMUA user yang membuka aplikasi ini akan otomatis 
+   * terhubung ke database yang sama tanpa perlu setting lagi.
+   */
+  scriptUrl: 'https://script.google.com/macros/s/AKfycbwps8yFemxgQwrDSOnp6apT0U2x3VW-_ctx_AueiWL851YQKtgwm4h6oB2yHdRiNe_G/exec', 
+  
   projects: [
     {
       name: 'Project Alpha',
