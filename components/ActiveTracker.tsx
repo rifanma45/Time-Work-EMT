@@ -38,7 +38,7 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
     return () => clearInterval(timer);
   }, [activeLog.startTime, activeLog.isPaused, activeLog.accumulatedMs]);
 
-  // Reset status konfirmasi jika diabaikan selama 3 detik
+  // Reset status konfirmasi jika tidak diklik lagi dalam 3 detik
   useEffect(() => {
     if (isConfirmingCancel) {
       const t = setTimeout(() => setIsConfirmingCancel(false), 3000);
@@ -49,15 +49,15 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
   const handleCancelClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (isConfirmingCancel) {
-      onCancel(); // Kembali ke awal & hapus data sesi ini
+      onCancel(); // Mengeksekusi pembatalan (kembali ke menu input tanpa menyimpan data)
     } else {
-      setIsConfirmingCancel(true);
+      setIsConfirmingCancel(true); // Meminta konfirmasi
     }
   };
 
   return (
     <div className="flex flex-col items-center space-y-8 max-w-2xl mx-auto w-full animate-in fade-in zoom-in-95 duration-500">
-      <div className="bg-white p-6 sm:p-10 rounded-[2.5rem] sm:rounded-[3rem] shadow-2xl border border-slate-100 w-full text-center relative overflow-hidden">
+      <div className="bg-white p-6 sm:p-10 rounded-[2.5rem] sm:rounded-[3rem] shadow-2xl border border-slate-100 w-full text-center relative overflow-hidden transition-all">
         <div className={`absolute top-0 left-0 w-full h-2 sm:h-3 transition-colors duration-500 ${activeLog.isPaused ? 'bg-amber-400' : 'bg-blue-600 animate-pulse'}`}></div>
         
         <div className="flex justify-center items-center space-x-2 mb-6">
@@ -69,7 +69,7 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
           )}
         </div>
 
-        <div className={`text-5xl sm:text-7xl md:text-8xl font-black tabular-nums mb-8 font-mono tracking-tighter leading-none ${activeLog.isPaused ? 'text-slate-300' : 'text-slate-900'}`}>
+        <div className={`text-5xl sm:text-7xl md:text-8xl font-black tabular-nums mb-8 font-mono tracking-tighter transition-all leading-none ${activeLog.isPaused ? 'text-slate-300' : 'text-slate-900'}`}>
           {elapsed}
         </div>
         
@@ -109,7 +109,7 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
             <button 
               type="button"
               onClick={onResume}
-              className="w-full h-16 sm:h-20 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[1.5rem] sm:rounded-[2rem] font-black text-lg sm:text-xl shadow-xl shadow-emerald-500/30 flex items-center justify-center space-x-3 active:scale-[0.97]"
+              className="w-full h-16 sm:h-20 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[1.5rem] sm:rounded-[2rem] font-black text-lg sm:text-xl transition-all shadow-xl shadow-emerald-500/30 flex items-center justify-center space-x-3 active:scale-[0.97]"
             >
               <svg className="w-6 h-6 sm:w-7 sm:h-7" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
@@ -120,7 +120,7 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
             <button 
               type="button"
               onClick={onPause}
-              className="w-full h-16 sm:h-20 bg-amber-500 hover:bg-amber-600 text-white rounded-[1.5rem] sm:rounded-[2rem] font-black text-lg sm:text-xl shadow-xl shadow-amber-500/30 flex items-center justify-center space-x-3 active:scale-[0.97]"
+              className="w-full h-16 sm:h-20 bg-amber-500 hover:bg-amber-600 text-white rounded-[1.5rem] sm:rounded-[2rem] font-black text-lg sm:text-xl transition-all shadow-xl shadow-amber-500/30 flex items-center justify-center space-x-3 active:scale-[0.97]"
             >
               <svg className="w-6 h-6 sm:w-7 sm:h-7" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -132,7 +132,7 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
           <button 
             type="button"
             onClick={() => onStop(new Date().toISOString(), elapsed)}
-            className="group relative w-full h-16 sm:h-20 bg-slate-900 hover:bg-blue-600 text-white rounded-[1.5rem] sm:rounded-[2rem] font-black text-base sm:text-lg shadow-xl active:scale-[0.97] flex items-center justify-center space-x-4"
+            className="group relative w-full h-16 sm:h-20 bg-slate-900 hover:bg-blue-600 text-white rounded-[1.5rem] sm:rounded-[2rem] font-black text-base sm:text-lg transition-all shadow-xl active:scale-[0.97] flex items-center justify-center space-x-4"
           >
             <div className="flex flex-col items-center">
               <div className="flex items-center space-x-2">
@@ -140,17 +140,17 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
                 <span>STOP & SELESAI</span>
               </div>
               {isCloudEnabled && (
-                <span className="text-[8px] sm:text-[9px] text-blue-400 font-bold uppercase tracking-widest mt-0.5 opacity-80 group-hover:text-white transition-colors">Data Masuk Spreadsheet</span>
+                <span className="text-[8px] sm:text-[9px] text-blue-400 font-bold uppercase tracking-widest mt-0.5 opacity-80 group-hover:text-white transition-colors">Kirim ke Spreadsheet</span>
               )}
             </div>
           </button>
         </div>
 
-        {/* TOMBOL BATAL KERJA - BERGUNA SEPERTI STOP TAPI DATA DIBUANG */}
+        {/* TOMBOL BATAL - BERFUNGSI SEPERTI STOP TAPI DATA TIDAK DISIMPAN */}
         <button 
           type="button"
           onClick={handleCancelClick}
-          className={`mx-auto flex items-center space-x-2 text-[11px] font-black uppercase tracking-[0.2em] py-3 px-8 rounded-2xl active:scale-95 border-none outline-none ${
+          className={`mx-auto flex items-center space-x-2 text-[11px] font-black uppercase tracking-[0.2em] transition-all py-3 px-8 rounded-2xl active:scale-95 border-none outline-none ${
             isConfirmingCancel 
               ? 'bg-red-600 text-white shadow-lg shadow-red-500/40 animate-pulse' 
               : 'text-slate-400 hover:text-red-500 bg-slate-100 hover:bg-slate-200'
@@ -163,7 +163,7 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
             )}
           </svg>
-          <span>{isConfirmingCancel ? 'KLIK LAGI UNTUK BATAL' : 'Batal (Buang Sesi)'}</span>
+          <span>{isConfirmingCancel ? 'KLIK LAGI UNTUK BATAL' : 'Batal & Kembali (Discard)'}</span>
         </button>
       </div>
     </div>
