@@ -29,12 +29,16 @@ const App: React.FC = () => {
 
   const [history, setHistory] = useState<TimeLog[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.HISTORY);
-    return saved ? JSON.parse(saved) : [];
+    try {
+      return saved ? JSON.parse(saved) : [];
+    } catch(e) { return []; }
   });
 
   const [deletedIds, setDeletedIds] = useState<Set<string>>(() => {
     const saved = localStorage.getItem('emt_deleted_ids');
-    return saved ? new Set(JSON.parse(saved)) : new Set();
+    try {
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch(e) { return new Set(); }
   });
 
   const [state, setState] = useState<AppState>({
@@ -73,7 +77,8 @@ const App: React.FC = () => {
       const response = await fetch(settings.scriptUrl);
       const data = await response.json();
       if (Array.isArray(data)) {
-        const filteredData = data.filter((log: TimeLog) => 
+        // Validasi ketat untuk menghindari error rendering
+        const filteredData = data.filter((log: any) => 
           log && log.id && 
           String(log.id).trim() !== '' && 
           !deletedIds.has(String(log.id))
@@ -171,8 +176,6 @@ const App: React.FC = () => {
   }, []);
 
   const handleCancelTracking = useCallback(() => {
-    // Fungsi ini dipanggil dari ActiveTracker setelah konfirmasi selesai.
-    // Tugasnya: Langsung reset tampilan ke menu input tanpa menyimpan data.
     setState({
       currentStep: 'input',
       activeLog: null

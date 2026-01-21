@@ -38,7 +38,6 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
     return () => clearInterval(timer);
   }, [activeLog.startTime, activeLog.isPaused, activeLog.accumulatedMs]);
 
-  // Otomatis batalkan status konfirmasi jika tidak diklik lagi dalam 3 detik
   useEffect(() => {
     if (isConfirmingCancel) {
       const t = setTimeout(() => setIsConfirmingCancel(false), 3000);
@@ -49,10 +48,8 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
   const handleCancelClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (isConfirmingCancel) {
-      // RESET TOTAL: Kembali ke awal tanpa simpan data
       onCancel();
     } else {
-      // Tampilkan peringatan pertama
       setIsConfirmingCancel(true);
     }
   };
@@ -148,7 +145,6 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
           </button>
         </div>
 
-        {/* TOMBOL BATAL - BERFUNGSI SEPERTI STOP TAPI DATA DIBUANG (DISCARD) */}
         <button 
           type="button"
           onClick={handleCancelClick}
