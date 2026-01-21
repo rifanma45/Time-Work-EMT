@@ -38,7 +38,7 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
     return () => clearInterval(timer);
   }, [activeLog.startTime, activeLog.isPaused, activeLog.accumulatedMs]);
 
-  // Reset status konfirmasi jika tidak diklik lagi dalam 3 detik
+  // Otomatis batalkan status konfirmasi jika tidak diklik lagi dalam 3 detik
   useEffect(() => {
     if (isConfirmingCancel) {
       const t = setTimeout(() => setIsConfirmingCancel(false), 3000);
@@ -49,9 +49,11 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
   const handleCancelClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (isConfirmingCancel) {
-      onCancel(); // Mengeksekusi pembatalan (kembali ke menu input tanpa menyimpan data)
+      // RESET TOTAL: Kembali ke awal tanpa simpan data
+      onCancel();
     } else {
-      setIsConfirmingCancel(true); // Meminta konfirmasi
+      // Tampilkan peringatan pertama
+      setIsConfirmingCancel(true);
     }
   };
 
@@ -140,20 +142,20 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
                 <span>STOP & SELESAI</span>
               </div>
               {isCloudEnabled && (
-                <span className="text-[8px] sm:text-[9px] text-blue-400 font-bold uppercase tracking-widest mt-0.5 opacity-80 group-hover:text-white transition-colors">Kirim ke Spreadsheet</span>
+                <span className="text-[8px] sm:text-[9px] text-blue-400 font-bold uppercase tracking-widest mt-0.5 opacity-80 group-hover:text-white transition-colors">Data Akan Terinput</span>
               )}
             </div>
           </button>
         </div>
 
-        {/* TOMBOL BATAL - BERFUNGSI SEPERTI STOP TAPI DATA TIDAK DISIMPAN */}
+        {/* TOMBOL BATAL - BERFUNGSI SEPERTI STOP TAPI DATA DIBUANG (DISCARD) */}
         <button 
           type="button"
           onClick={handleCancelClick}
           className={`mx-auto flex items-center space-x-2 text-[11px] font-black uppercase tracking-[0.2em] transition-all py-3 px-8 rounded-2xl active:scale-95 border-none outline-none ${
             isConfirmingCancel 
-              ? 'bg-red-600 text-white shadow-lg shadow-red-500/40 animate-pulse' 
-              : 'text-slate-400 hover:text-red-500 bg-slate-100 hover:bg-slate-200'
+              ? 'bg-red-600 text-white shadow-lg shadow-red-500/40 animate-pulse scale-105' 
+              : 'text-slate-400 hover:text-red-500 bg-slate-100/50 hover:bg-slate-100'
           }`}
         >
           <svg className={`w-3.5 h-3.5 ${isConfirmingCancel ? 'animate-bounce' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,7 +165,7 @@ export const ActiveTracker: React.FC<ActiveTrackerProps & { isCloudEnabled?: boo
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
             )}
           </svg>
-          <span>{isConfirmingCancel ? 'KLIK LAGI UNTUK BATAL' : 'Batal & Kembali (Discard)'}</span>
+          <span>{isConfirmingCancel ? 'KLIK LAGI UNTUK BATAL' : 'Batal & Discard Sesi'}</span>
         </button>
       </div>
     </div>
