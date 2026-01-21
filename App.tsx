@@ -10,6 +10,7 @@ import { HistoryTable } from './components/HistoryTable';
 import { SettingsPanel } from './components/SettingsPanel';
 import { ShareModal } from './components/ShareModal';
 import { EditLogModal } from './components/EditLogModal';
+import { ConfirmDeleteModal } from './components/ConfirmDeleteModal';
 import { GoogleGenAI } from "@google/genai";
 
 const App: React.FC = () => {
@@ -21,12 +22,9 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     let currentSettings: Settings = saved ? JSON.parse(saved) : INITIAL_SETTINGS;
-    
-    // MASTER SYNC: Jika ada URL di constants.ts, ini adalah otoritas tertinggi
     if (INITIAL_SETTINGS.scriptUrl && INITIAL_SETTINGS.scriptUrl.trim() !== '') {
       currentSettings.scriptUrl = INITIAL_SETTINGS.scriptUrl;
     }
-    
     return currentSettings;
   });
 
@@ -41,22 +39,25 @@ const App: React.FC = () => {
   });
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [insight, setInsight] = useState<string | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [editingLog, setEditingLog] = useState<TimeLog | null>(null);
+  
+  // Delete Confirmation States
+  const [deleteConfig, setDeleteConfig] = useState<{
+    isOpen: boolean;
+    type: 'single' | 'all';
+    targetId?: string;
+  }>({ isOpen: false, type: 'single' });
 
-  // Menjaga agar scriptUrl tetap sinkron dengan konstanta (Master Otoritas)
   useEffect(() => {
     if (INITIAL_SETTINGS.scriptUrl && settings.scriptUrl !== INITIAL_SETTINGS.scriptUrl) {
-      setSettings(prev => ({
-        ...prev,
-        scriptUrl: INITIAL_SETTINGS.scriptUrl
-      }));
+      setSettings(prev => ({ ...prev, scriptUrl: INITIAL_SETTINGS.scriptUrl }));
     }
   }, [settings.scriptUrl]);
 
-  // Persistence
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }, [settings]);
@@ -65,12 +66,10 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
   }, [history]);
 
-  // Security and State Management
   useEffect(() => {
     if (user) {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       const isAdmin = settings.adminEmails.some(a => a.toLowerCase() === user.email.toLowerCase()) || user.email === ADMIN_EMAIL;
-      
       if (!isAdmin && (state.currentStep === 'history' || state.currentStep === 'settings')) {
         setState(prev => ({ ...prev, currentStep: 'input' }));
       }
@@ -79,45 +78,51 @@ const App: React.FC = () => {
     }
   }, [user, state.currentStep, settings.adminEmails]);
 
-  // Cloud Sync Functions
-  const refreshFromCloud = useCallback(async () => {
-    if (!settings.scriptUrl) {
-      alert("Database belum dikonfigurasi.");
-      return;
-    }
-    setIsSyncing(true);
+  const refreshFromCloud = useCallback(async (silent = false) => {
+    if (!settings.scriptUrl) return;
+    if (!silent) setIsSyncing(true);
     try {
       const response = await fetch(settings.scriptUrl);
       const data = await response.json();
       if (Array.isArray(data)) {
         setHistory(data);
+        setLastSyncTime(new Date().toLocaleTimeString());
       }
     } catch (err) {
       console.error("Cloud Sync Error:", err);
-      alert("Gagal mengambil data. Pastikan URL Apps Script sudah benar dan akses disetel ke 'Anyone'.");
+      if (!silent) alert("Gagal mengambil data dari Google Sheets.");
     } finally {
-      setIsSyncing(false);
+      if (!silent) setIsSyncing(false);
     }
   }, [settings.scriptUrl]);
 
-  const pushToCloud = async (log: TimeLog) => {
+  useEffect(() => {
+    if (state.currentStep === 'history') {
+      refreshFromCloud();
+    }
+  }, [state.currentStep, refreshFromCloud]);
+
+  const pushToCloud = async (log: any, action: 'create' | 'update' | 'delete' | 'clearAll' = 'create') => {
     if (!settings.scriptUrl) return;
+    setIsSyncing(true);
     try {
       await fetch(settings.scriptUrl, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(log)
+        body: JSON.stringify({ ...log, cloudAction: action })
       });
+      setTimeout(() => refreshFromCloud(true), 2000);
     } catch (err) {
       console.error("Cloud Push Error:", err);
+    } finally {
+      setTimeout(() => setIsSyncing(false), 1000);
     }
   };
 
   const handleLogin = (email: string) => {
     const isAdmin = settings.adminEmails.some(admin => admin.toLowerCase() === email.toLowerCase()) || email === ADMIN_EMAIL;
-    const newUser = { email, isAdmin };
-    setUser(newUser);
+    setUser({ email, isAdmin });
   };
 
   const handleLogout = () => {
@@ -145,7 +150,6 @@ const App: React.FC = () => {
     const now = new Date().getTime();
     const start = new Date(state.activeLog.startTime!).getTime();
     const sessionMs = now - start;
-    
     setState(prev => ({
       ...prev,
       activeLog: {
@@ -171,7 +175,6 @@ const App: React.FC = () => {
 
   const stopTracking = async (endTime: string, totalTime: string) => {
     if (!state.activeLog) return;
-    
     const newLog: TimeLog = {
       ...(state.activeLog as TimeLog),
       id: Math.random().toString(36).substr(2, 9),
@@ -182,42 +185,39 @@ const App: React.FC = () => {
       isPaused: false,
       accumulatedMs: 0
     };
-    
     setHistory(prev => [newLog, ...prev]);
     setState({ currentStep: 'input', activeLog: null });
-    
-    await pushToCloud(newLog);
-    generateInsights([newLog, ...history]);
+    await pushToCloud(newLog, 'create');
   };
 
-  const handleUpdateLog = (updatedLog: TimeLog) => {
+  const handleUpdateLog = async (updatedLog: TimeLog) => {
     setHistory(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log));
     setEditingLog(null);
+    await pushToCloud(updatedLog, 'update');
   };
 
-  const handleDeleteLog = (id: string) => {
-    if (window.confirm('Hapus data pengerjaan ini secara permanen?')) {
-      setHistory(prev => prev.filter(log => log.id !== id));
+  // NEW: Refined delete handlers using custom modal
+  const confirmDeleteLog = (id: string) => {
+    setDeleteConfig({ isOpen: true, type: 'single', targetId: id });
+  };
+
+  const confirmDeleteAll = () => {
+    setDeleteConfig({ isOpen: true, type: 'all' });
+  };
+
+  const executeDelete = async () => {
+    if (deleteConfig.type === 'single' && deleteConfig.targetId) {
+      const logToDelete = history.find(l => l.id === deleteConfig.targetId);
+      setHistory(prev => prev.filter(log => log.id !== deleteConfig.targetId));
+      if (logToDelete) await pushToCloud(logToDelete, 'delete');
+    } else if (deleteConfig.type === 'all') {
+      setHistory([]);
+      await pushToCloud({}, 'clearAll');
     }
+    setDeleteConfig({ isOpen: false, type: 'single' });
   };
 
-  const generateInsights = async (currentHistory: TimeLog[]) => {
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Analisis data teknisi ini: ${JSON.stringify(currentHistory.slice(0, 3))}. Berikan 1 pesan singkat motivasi untuk tim EMT (max 10 kata).`,
-      });
-      setInsight(response.text);
-    } catch (err) {
-      console.error("AI Error:", err);
-    }
-  };
-
-  if (!user) {
-    return <Login onLogin={handleLogin} />;
-  }
-
+  if (!user) return <Login onLogin={handleLogin} />;
   const isAdmin = settings.adminEmails.some(a => a.toLowerCase() === user.email.toLowerCase()) || user.email === ADMIN_EMAIL;
 
   return (
@@ -231,17 +231,11 @@ const App: React.FC = () => {
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
-      
       <main className="flex-1 p-6 md:p-10 overflow-y-auto">
         <header className="mb-8 flex justify-between items-start">
           <div className="flex items-start space-x-3">
-            <button 
-              onClick={() => setIsSidebarOpen(true)}
-              className="md:hidden p-2 bg-white border border-slate-200 rounded-lg text-slate-600 shadow-sm"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
+            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 bg-white border border-slate-200 rounded-lg text-slate-600 shadow-sm">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-slate-900 leading-tight">
@@ -258,54 +252,36 @@ const App: React.FC = () => {
           
           <div className="flex items-center space-x-2 md:space-x-4">
             {state.currentStep === 'history' && isAdmin && (
-              <button 
-                onClick={refreshFromCloud}
-                disabled={isSyncing || !settings.scriptUrl}
-                className={`p-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 shadow-sm hover:bg-slate-50 transition-all ${isSyncing ? 'animate-spin' : 'active:scale-95'}`}
-                title="Sync dengan Google Sheets"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357-2H15" />
-                </svg>
-              </button>
-            )}
-            
-            {insight && (
-              <div className="hidden lg:block bg-blue-50 border border-blue-100 px-4 py-2 rounded-xl text-xs text-blue-700 italic max-w-sm shadow-sm animate-in fade-in slide-in-from-right-4">
-                ✨ {insight}
+              <div className="flex items-center space-x-3">
+                {lastSyncTime && (
+                  <span className="hidden sm:inline-block text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
+                    Last Sync: {lastSyncTime}
+                  </span>
+                )}
+                <button 
+                  onClick={() => refreshFromCloud()}
+                  disabled={isSyncing || !settings.scriptUrl}
+                  className={`p-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 shadow-sm hover:bg-slate-50 transition-all ${isSyncing ? 'animate-spin' : 'active:scale-95'}`}
+                  title="Refresh dari Google Sheets"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357-2H15" /></svg>
+                </button>
               </div>
             )}
-            
-            <button 
-              onClick={() => setIsShareModalOpen(true)}
-              className="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 100-2.684 3 3 0 000 2.684zm0 9a3 3 0 100-2.684 3 3 0 000 2.684z" />
-              </svg>
+            <button onClick={() => setIsShareModalOpen(true)} className="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 100-2.684 3 3 0 000 2.684zm0 9a3 3 0 100-2.684 3 3 0 000 2.684z" /></svg>
             </button>
           </div>
         </header>
 
         <div className="max-w-6xl mx-auto">
-          {state.currentStep === 'input' && (
-            <InputForm settings={settings} onStart={startTracking} />
-          )}
-          
+          {state.currentStep === 'input' && <InputForm settings={settings} onStart={startTracking} />}
           {state.currentStep === 'active' && state.activeLog && (
-            <ActiveTracker 
-              activeLog={state.activeLog} 
-              onStop={stopTracking} 
-              onPause={handlePause}
-              onResume={handleResume}
-              isCloudEnabled={!!settings.scriptUrl}
-            />
+            <ActiveTracker activeLog={state.activeLog} onStop={stopTracking} onPause={handlePause} onResume={handleResume} isCloudEnabled={!!settings.scriptUrl} />
           )}
-          
           {state.currentStep === 'history' && isAdmin && (
-            <HistoryTable history={history} onEdit={setEditingLog} onDelete={handleDeleteLog} />
+            <HistoryTable history={history} onEdit={setEditingLog} onDelete={confirmDeleteLog} onDeleteAll={confirmDeleteAll} isSyncing={isSyncing} />
           )}
-          
           {state.currentStep === 'settings' && isAdmin && (
             <SettingsPanel settings={settings} onUpdateSettings={setSettings} currentUserEmail={user.email} />
           )}
@@ -314,6 +290,13 @@ const App: React.FC = () => {
 
       <ShareModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} />
       {editingLog && <EditLogModal log={editingLog} settings={settings} onSave={handleUpdateLog} onClose={() => setEditingLog(null)} />}
+      
+      <ConfirmDeleteModal 
+        isOpen={deleteConfig.isOpen}
+        type={deleteConfig.type}
+        onConfirm={executeDelete}
+        onClose={() => setDeleteConfig({ isOpen: false, type: 'single' })}
+      />
     </div>
   );
 };

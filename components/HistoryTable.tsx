@@ -6,9 +6,11 @@ interface HistoryTableProps {
   history: TimeLog[];
   onEdit: (log: TimeLog) => void;
   onDelete: (id: string) => void;
+  onDeleteAll: () => void;
+  isSyncing?: boolean;
 }
 
-export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onDelete }) => {
+export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onDelete, onDeleteAll, isSyncing }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredHistory = history.filter(log => 
@@ -46,11 +48,14 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
 
   return (
     <div className="space-y-6">
-      {/* Ringkasan Admin */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Ringkasan Admin - Menghapus kartu Panel Selesai */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Logs</p>
-          <p className="text-3xl font-black text-slate-800 tracking-tighter">{history.length}</p>
+          <div className="flex items-center space-x-2">
+            <p className="text-3xl font-black text-slate-800 tracking-tighter">{history.length}</p>
+            {isSyncing && <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>}
+          </div>
         </div>
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Workers Aktif</p>
@@ -60,14 +65,10 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Project Berjalan</p>
           <p className="text-3xl font-black text-indigo-600 tracking-tighter">{new Set(history.map(h => h.project)).size}</p>
         </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Panel Selesai</p>
-          <p className="text-3xl font-black text-green-600 tracking-tighter">{new Set(history.map(h => h.panelCode)).size}</p>
-        </div>
       </div>
 
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row gap-4 justify-between bg-slate-50/50">
+        <div className="p-5 border-b border-slate-100 flex flex-col xl:flex-row gap-4 justify-between bg-slate-50/50">
           <div className="relative flex-1 max-w-md">
             <svg className="w-5 h-5 absolute left-3.5 top-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -80,15 +81,43 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <button 
-            onClick={exportToCSV}
-            className="flex items-center justify-center space-x-2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-95"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            <span>Ekstrak Data CSV</span>
-          </button>
+          
+          <div className="flex flex-wrap gap-2">
+            {isSyncing && (
+              <div className="flex items-center space-x-2 px-4 bg-blue-50 text-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-blue-100">
+                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Syncing...</span>
+              </div>
+            )}
+            
+            <button 
+              onClick={exportToCSV}
+              className="flex items-center justify-center space-x-2 bg-slate-900 text-white px-5 py-2.5 rounded-2xl text-xs font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>Ekstrak CSV</span>
+            </button>
+
+            <button 
+              onClick={onDeleteAll}
+              disabled={isSyncing || history.length === 0}
+              className={`flex items-center justify-center space-x-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all shadow-lg active:scale-95 ${
+                isSyncing || history.length === 0 
+                ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
+                : 'bg-red-50 text-red-600 border border-red-100 hover:bg-red-600 hover:text-white'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span>Hapus Semua</span>
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -106,7 +135,9 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
             <tbody className="divide-y divide-slate-100">
               {filteredHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-16 text-center text-slate-400 italic font-medium">Belum ada data pengerjaan yang masuk.</td>
+                  <td colSpan={6} className="p-16 text-center text-slate-400 italic font-medium">
+                    {isSyncing ? 'Menarik data dari Google Sheets...' : 'Belum ada data pengerjaan.'}
+                  </td>
                 </tr>
               ) : (
                 filteredHistory.map((log) => (
@@ -141,18 +172,20 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
                       <span className="font-mono font-black text-slate-900 text-sm tracking-tighter">{log.totalTime}</span>
                     </td>
                     <td className="p-5 text-center">
-                      <div className="flex justify-center space-x-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex justify-center space-x-1.5 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
+                          disabled={isSyncing}
                           onClick={() => onEdit(log)}
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                          className={`p-2 rounded-xl transition-all ${isSyncing ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'}`}
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
                         </button>
                         <button 
+                          disabled={isSyncing}
                           onClick={() => onDelete(log.id)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                          className={`p-2 rounded-xl transition-all ${isSyncing ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'}`}
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
