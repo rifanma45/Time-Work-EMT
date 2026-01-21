@@ -23,7 +23,8 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
         (log.email?.toLowerCase().includes(s)) ||
         (log.project?.toLowerCase().includes(s)) ||
         (log.panelName?.toLowerCase().includes(s)) ||
-        (log.panelCode?.toLowerCase().includes(s))
+        (log.panelCode?.toLowerCase().includes(s)) ||
+        (log.jobSection?.toLowerCase().includes(s))
       );
     });
   }, [history, searchTerm]);

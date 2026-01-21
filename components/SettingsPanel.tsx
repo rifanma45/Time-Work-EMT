@@ -9,6 +9,8 @@ interface SettingsPanelProps {
   currentUserEmail: string;
 }
 
+type DeleteType = 'project' | 'panel' | 'code';
+
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdateSettings, currentUserEmail }) => {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [selectedPanelId, setSelectedPanelId] = useState<number | null>(null);
@@ -16,6 +18,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
   const [newAdmin, setNewAdmin] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [showGasCode, setShowGasCode] = useState(false);
+
+  // State for Custom Delete Confirmation
+  const [confirmModal, setConfirmModal] = useState<{
+    show: boolean;
+    type: DeleteType;
+    index: number;
+    title: string;
+    warning?: string;
+  }>({ show: false, type: 'project', index: -1, title: '' });
 
   const projects = settings.projects;
   const adminEmails = settings.adminEmails || [];
@@ -26,10 +37,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
 
   const gasCode = `/**
  * GOOGLE APPS SCRIPT FOR EMT TRACKER (VERSY SYNC BY ID)
- * Pastikan Spreadsheet Anda memiliki header berikut di Baris 1:
- * [ id, email, project, panelName, panelCode, jobSection, startTime, endTime, totalTime, timestamp ]
  */
-
 function doGet() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   var data = sheet.getDataRange().getValues();
@@ -40,7 +48,6 @@ function doGet() {
     for (var j = 0; j < headers.length; j++) {
       obj[headers[j]] = data[i][j];
     }
-    // Hanya masukkan data yang punya ID valid ke JSON output
     if (obj.id && obj.id.toString().trim() !== "") {
       json.push(obj);
     }
@@ -54,66 +61,30 @@ function doPost(e) {
   var action = content.cloudAction;
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
-
-  // Cari index kolom "id" secara dinamis di header
-  var idColIndex = -1;
-  for (var k = 0; k < headers.length; k++) {
-    if (headers[k].toString().toLowerCase() === 'id') {
-      idColIndex = k;
-      break;
-    }
-  }
+  var idColIndex = headers.indexOf('id');
 
   if (action === 'delete') {
-    if (idColIndex === -1) return ContentService.createTextOutput("Error: No ID column");
-    // Cari dari bawah ke atas untuk menghindari geseran index saat hapus
     for (var i = data.length - 1; i >= 1; i--) {
       if (data[i][idColIndex].toString() === content.id.toString()) {
         sheet.deleteRow(i + 1);
       }
     }
   } else if (action === 'clearAll') {
-    if (sheet.getLastRow() > 1) {
-      sheet.deleteRows(2, sheet.getLastRow() - 1);
-    }
+    if (sheet.getLastRow() > 1) sheet.deleteRows(2, sheet.getLastRow() - 1);
   } else if (action === 'update') {
-    if (idColIndex === -1) return ContentService.createTextOutput("Error: No ID column");
     for (var i = 1; i < data.length; i++) {
       if (data[i][idColIndex].toString() === content.id.toString()) {
         var rowValues = headers.map(h => content[h] !== undefined ? content[h] : "");
         sheet.getRange(i + 1, 1, 1, headers.length).setValues([rowValues]);
-        break; // Stop setelah ketemu dan update
+        break;
       }
     }
-  } else { // action: create
+  } else {
     var rowValues = headers.map(h => content[h] !== undefined ? content[h] : "");
     sheet.appendRow(rowValues);
   }
-  
   return ContentService.createTextOutput("Success");
 }`;
-
-  const handleCopyGas = () => {
-    navigator.clipboard.writeText(gasCode);
-    alert("Kode Google Script Sinkron ID berhasil disalin!");
-  };
-
-  const testConnection = async () => {
-    if (!settings.scriptUrl) return alert("URL Master Database belum diatur");
-    setIsTesting(true);
-    try {
-      const res = await fetch(settings.scriptUrl);
-      if (res.ok || res.type === 'opaque') {
-        alert("✅ KONEKSI GLOBAL AKTIF!");
-      } else {
-        alert("❌ KONEKSI GAGAL");
-      }
-    } catch (e) {
-      alert("⚠️ INFO: Pastikan Google Script disetel ke 'Anyone'.");
-    } finally {
-      setIsTesting(false);
-    }
-  };
 
   const handleAddProject = () => {
     if (!newItem.trim()) return;
@@ -137,19 +108,75 @@ function doPost(e) {
     setNewItem('');
   };
 
-  const handleAddAdmin = () => {
-    if (!isSuperAdmin || !newAdmin.trim() || !newAdmin.includes('@')) return;
-    onUpdateSettings({ ...settings, adminEmails: [...adminEmails, newAdmin] });
-    setNewAdmin('');
+  // Open confirmation modal instead of immediate delete
+  const triggerDelete = (type: DeleteType, index: number, title: string, warning?: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setConfirmModal({ show: true, type, index, title, warning });
   };
 
-  const removeAdmin = (email: string) => {
-    if (!isSuperAdmin || email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return;
-    onUpdateSettings({ ...settings, adminEmails: adminEmails.filter(a => a !== email) });
+  const executeDelete = () => {
+    const { type, index } = confirmModal;
+    const updatedProjects = [...projects];
+
+    if (type === 'project') {
+      const filtered = updatedProjects.filter((_, i) => i !== index);
+      onUpdateSettings({ ...settings, projects: filtered });
+      setSelectedProjectId(null);
+      setSelectedPanelId(null);
+    } else if (type === 'panel' && selectedProjectId !== null) {
+      updatedProjects[selectedProjectId].panels = updatedProjects[selectedProjectId].panels.filter((_, i) => i !== index);
+      onUpdateSettings({ ...settings, projects: updatedProjects });
+      setSelectedPanelId(null);
+    } else if (type === 'code' && selectedProjectId !== null && selectedPanelId !== null) {
+      updatedProjects[selectedProjectId].panels[selectedPanelId].codes = updatedProjects[selectedProjectId].panels[selectedPanelId].codes.filter((_, i) => i !== index);
+      onUpdateSettings({ ...settings, projects: updatedProjects });
+    }
+
+    setConfirmModal({ ...confirmModal, show: false });
   };
 
   return (
-    <div className="space-y-10 pb-24">
+    <div className="space-y-10 pb-24 relative">
+      {/* CUSTOM DELETE CONFIRMATION MODAL */}
+      {confirmModal.show && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-8 text-center">
+              <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-5 text-red-500">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <h4 className="text-xl font-black text-slate-800 mb-2">Konfirmasi Hapus</h4>
+              <p className="text-slate-500 text-sm mb-1">Anda akan menghapus:</p>
+              <p className="font-black text-slate-900 bg-slate-100 py-2 px-4 rounded-xl inline-block mb-4 text-sm truncate max-w-full">
+                {confirmModal.title}
+              </p>
+              {confirmModal.warning && (
+                <div className="bg-red-50 text-red-600 p-3 rounded-xl text-[10px] font-bold uppercase tracking-wider mb-6 border border-red-100">
+                  {confirmModal.warning}
+                </div>
+              )}
+              <div className="flex flex-col space-y-2">
+                <button 
+                  onClick={executeDelete}
+                  className="w-full py-3.5 bg-red-600 text-white rounded-xl font-black text-sm shadow-lg shadow-red-500/20 active:scale-95 transition-all"
+                >
+                  IYA, HAPUS SEKARANG
+                </button>
+                <button 
+                  onClick={() => setConfirmModal({ ...confirmModal, show: false })}
+                  className="w-full py-3 text-slate-400 font-bold text-sm hover:text-slate-600 transition-colors"
+                >
+                  Batal
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONNECTION SETTINGS */}
       <div className="bg-white rounded-[2rem] shadow-xl border-4 border-blue-500/10 overflow-hidden">
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6 text-white">
           <div className="flex items-center justify-between">
@@ -158,118 +185,90 @@ function doPost(e) {
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
               </div>
               <div>
-                <h3 className="font-black uppercase tracking-widest text-lg">Master Connection Settings</h3>
+                <h3 className="font-black uppercase tracking-widest text-lg">Master Connection</h3>
               </div>
             </div>
-            {isSuperAdmin && (
-              <button onClick={testConnection} disabled={isTesting} className="bg-white text-blue-600 px-6 py-2 rounded-xl text-sm font-black hover:bg-blue-50">
-                {isTesting ? 'Mengecek...' : 'Uji Master'}
-              </button>
-            )}
           </div>
         </div>
-        
-        <div className="p-8 space-y-6">
-          <div className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-6">
-            <p className="text-xs font-bold text-slate-500 mb-4 leading-relaxed">
-              <strong>PENTING:</strong> Agar aksi Hapus dan Edit tersinkron ke Spreadsheet, Anda wajib memperbarui kode Google Apps Script ke versi ID-Sync.
-            </p>
-            
-            <button 
+        <div className="p-8">
+           <button 
               onClick={() => setShowGasCode(!showGasCode)}
               className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl font-bold text-xs border border-blue-200 mb-4"
             >
-              {showGasCode ? 'Sembunyikan Instruksi' : 'Lihat Kode Script ID-Sync (Wajib Update)'}
+              {showGasCode ? 'Sembunyikan Kode' : 'Lihat Kode Script ID-Sync'}
             </button>
-
             {showGasCode && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
-                  <p className="text-[10px] text-amber-700 font-bold uppercase mb-2">Header Spreadsheet (Kolom A wajib 'id'):</p>
-                  <div className="bg-white p-2 rounded border border-amber-200 font-mono text-[9px] text-slate-600 overflow-x-auto whitespace-nowrap">
-                    id | email | project | panelName | panelCode | jobSection | startTime | endTime | totalTime | timestamp
-                  </div>
-                </div>
-                
-                <div className="relative">
-                  <textarea 
-                    readOnly 
-                    className="w-full h-48 p-4 bg-slate-900 text-emerald-400 font-mono text-[9px] rounded-xl outline-none"
-                    value={gasCode}
-                  />
-                  <button 
-                    onClick={handleCopyGas}
-                    className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-lg text-[10px] font-bold"
-                  >
-                    Salin Kode ID-Sync
-                  </button>
-                </div>
-              </div>
+               <div className="relative">
+                  <textarea readOnly className="w-full h-32 p-4 bg-slate-900 text-emerald-400 font-mono text-[9px] rounded-xl outline-none" value={gasCode} />
+                  <button onClick={() => {navigator.clipboard.writeText(gasCode); alert("Salin Sukses!");}} className="absolute top-2 right-2 bg-white/10 text-white px-2 py-1 rounded text-[9px]">Salin</button>
+               </div>
             )}
-          </div>
         </div>
       </div>
 
-      {isSuperAdmin && (
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="bg-slate-900 px-6 py-4 text-white flex justify-between items-center">
-            <h3 className="font-bold uppercase tracking-wider text-xs">Kelola Akses Admin Tim</h3>
-          </div>
-          <div className="p-6">
-            <div className="flex space-x-3 mb-6">
-              <input type="email" className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-sm" placeholder="Email admin baru..." value={newAdmin} onChange={(e) => setNewAdmin(e.target.value)} />
-              <button onClick={handleAddAdmin} className="px-6 py-2 bg-slate-800 text-white rounded-xl font-bold text-sm">Tambah</button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {adminEmails.map((email, i) => (
-                <div key={i} className="flex items-center space-x-2 px-3 py-2 bg-slate-100 rounded-xl border border-slate-200">
-                  <span className="text-xs font-bold text-slate-700">{email}</span>
-                  {email.toLowerCase() !== ADMIN_EMAIL.toLowerCase() && (
-                    <button onClick={() => removeAdmin(email)} className="text-slate-400 hover:text-red-500 font-black">×</button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+      {/* DROPDOWN VARIABLE MANAGEMENT - AUTO ADJUSTING LAYOUT */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* STEP 1: PROJECT */}
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-fit min-h-[200px] max-h-[600px] transition-all duration-300">
           <div className="bg-slate-800 px-4 py-3 text-white font-black text-[10px] uppercase tracking-widest text-center">Step 1: Project</div>
           <div className="p-4 border-b border-slate-100">
             <div className="flex space-x-1">
-              <input type="text" className="flex-1 px-3 py-2 text-sm rounded-xl border outline-none bg-slate-50" placeholder="Nama Project..." value={selectedProjectId === null ? newItem : ''} onChange={(e) => selectedProjectId === null && setNewItem(e.target.value)} onFocus={() => {setSelectedProjectId(null); setSelectedPanelId(null);}} />
+              <input type="text" className="flex-1 px-3 py-2 text-sm rounded-xl border outline-none bg-slate-50" placeholder="Tambah Project..." value={selectedProjectId === null ? newItem : ''} onChange={(e) => selectedProjectId === null && setNewItem(e.target.value)} onFocus={() => {setSelectedProjectId(null); setSelectedPanelId(null);}} />
               <button onClick={handleAddProject} className="bg-blue-600 text-white px-4 rounded-xl font-bold">+</button>
             </div>
           </div>
-          <div className="max-h-[300px] overflow-y-auto">
+          <div className="overflow-y-auto">
             {projects.map((p, i) => (
-              <div key={i} onClick={() => {setSelectedProjectId(i); setSelectedPanelId(null);}} className={`p-4 text-sm flex justify-between cursor-pointer ${selectedProjectId === i ? 'bg-blue-50 text-blue-700 font-black border-r-4 border-blue-600' : 'hover:bg-slate-50 text-slate-600'}`}>
-                <span>{p.name}</span>
+              <div key={i} onClick={() => {setSelectedProjectId(i); setSelectedPanelId(null);}} className={`group p-4 text-sm flex justify-between items-center cursor-pointer transition-colors ${selectedProjectId === i ? 'bg-blue-50 text-blue-700 font-black border-r-4 border-blue-600' : 'hover:bg-slate-50 text-slate-600 border-r-4 border-transparent'}`}>
+                <span className="truncate pr-2">{p.name}</span>
+                <button 
+                  onClick={(e) => triggerDelete('project', i, p.name, 'PERINGATAN: Semua panel & kode di dalamnya akan terhapus!', e)}
+                  className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
               </div>
             ))}
+            {projects.length === 0 && <p className="p-8 text-center text-[10px] font-bold text-slate-300 uppercase italic">Belum ada project</p>}
           </div>
         </div>
 
-        <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden ${selectedProjectId === null ? 'opacity-40' : ''}`}>
+        {/* STEP 2: PANEL */}
+        <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-fit min-h-[200px] max-h-[600px] transition-all duration-300 ${selectedProjectId === null ? 'opacity-40 pointer-events-none' : ''}`}>
           <div className="bg-slate-700 px-4 py-3 text-white font-black text-[10px] uppercase tracking-widest text-center">Step 2: Panel</div>
           <div className="p-4 border-b border-slate-100">
             <div className="flex space-x-1">
-              <input type="text" className="flex-1 px-3 py-2 text-sm rounded-xl border outline-none bg-slate-50" placeholder="Nama Panel..." value={selectedProjectId !== null && selectedPanelId === null ? newItem : ''} onChange={(e) => selectedProjectId !== null && selectedPanelId === null && setNewItem(e.target.value)} onFocus={() => setSelectedPanelId(null)} />
+              <input type="text" className="flex-1 px-3 py-2 text-sm rounded-xl border outline-none bg-slate-50" placeholder="Tambah Panel..." value={selectedProjectId !== null && selectedPanelId === null ? newItem : ''} onChange={(e) => selectedProjectId !== null && selectedPanelId === null && setNewItem(e.target.value)} onFocus={() => setSelectedPanelId(null)} />
               <button onClick={handleAddPanel} className="bg-blue-600 text-white px-4 rounded-xl font-bold">+</button>
             </div>
           </div>
-          <div className="max-h-[300px] overflow-y-auto">
+          <div className="overflow-y-auto">
             {currentProject?.panels.map((p, i) => (
-              <div key={i} onClick={() => setSelectedPanelId(i)} className={`p-4 text-sm flex justify-between cursor-pointer ${selectedPanelId === i ? 'bg-blue-50 text-blue-700 font-black border-r-4 border-blue-600' : 'hover:bg-slate-50 text-slate-600'}`}>
-                <span>{p.name}</span>
+              <div key={i} onClick={() => setSelectedPanelId(i)} className={`group p-4 text-sm flex justify-between items-center cursor-pointer transition-colors ${selectedPanelId === i ? 'bg-blue-50 text-blue-700 font-black border-r-4 border-blue-600' : 'hover:bg-slate-50 text-slate-600 border-r-4 border-transparent'}`}>
+                <span className="truncate pr-2">{p.name}</span>
+                <button 
+                  onClick={(e) => triggerDelete('panel', i, p.name, 'Menghapus panel akan menghapus semua kode unik di dalamnya.', e)}
+                  className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
               </div>
             ))}
+            {selectedProjectId !== null && currentProject?.panels.length === 0 && (
+              <p className="p-8 text-center text-[10px] font-bold text-slate-300 uppercase italic">Belum ada panel</p>
+            )}
+            {selectedProjectId === null && (
+              <p className="p-8 text-center text-[10px] font-bold text-slate-300 uppercase italic">Pilih project dahulu</p>
+            )}
           </div>
         </div>
 
-        <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden ${selectedPanelId === null ? 'opacity-40' : ''}`}>
+        {/* STEP 3: KODE */}
+        <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-fit min-h-[200px] max-h-[600px] transition-all duration-300 ${selectedPanelId === null ? 'opacity-40 pointer-events-none' : ''}`}>
           <div className="bg-slate-600 px-4 py-3 text-white font-black text-[10px] uppercase tracking-widest text-center">Step 3: Kode</div>
           <div className="p-4 border-b border-slate-100">
             <div className="flex space-x-1">
@@ -277,10 +276,26 @@ function doPost(e) {
               <button onClick={handleAddCode} className="bg-blue-600 text-white px-4 rounded-xl font-bold">+</button>
             </div>
           </div>
-          <div className="max-h-[300px] overflow-y-auto p-2">
+          <div className="overflow-y-auto p-2 space-y-1">
             {currentPanel?.codes.map((c, i) => (
-              <div key={i} className="p-3 text-xs bg-slate-50 rounded-lg mb-1 text-slate-700 font-mono border border-slate-100">{c}</div>
+              <div key={i} className="group p-3 text-xs bg-slate-50 rounded-lg text-slate-700 font-mono border border-slate-100 flex justify-between items-center transition-all hover:bg-white hover:shadow-sm">
+                <span>{c}</span>
+                <button 
+                  onClick={(e) => triggerDelete('code', i, c, undefined, e)}
+                  className="text-slate-300 hover:text-red-600 p-1 rounded transition-colors opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
             ))}
+            {selectedPanelId !== null && currentPanel?.codes.length === 0 && (
+              <p className="p-8 text-center text-[10px] font-bold text-slate-300 uppercase italic">Belum ada kode</p>
+            )}
+            {selectedPanelId === null && (
+              <p className="p-8 text-center text-[10px] font-bold text-slate-300 uppercase italic">Pilih panel dahulu</p>
+            )}
           </div>
         </div>
       </div>
