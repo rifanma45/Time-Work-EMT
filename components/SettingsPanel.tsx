@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Settings, Project, Panel } from '../types';
-import { ADMIN_EMAIL, INITIAL_SETTINGS } from '../constants';
+import { ADMIN_EMAIL } from '../constants';
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -15,6 +15,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
   const [newItem, setNewItem] = useState('');
   const [newAdmin, setNewAdmin] = useState('');
   const [isTesting, setIsTesting] = useState(false);
+  const [showGasCode, setShowGasCode] = useState(false);
 
   const projects = settings.projects;
   const adminEmails = settings.adminEmails || [];
@@ -23,18 +24,92 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
 
   const isSuperAdmin = currentUserEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
+  const gasCode = `/**
+ * GOOGLE APPS SCRIPT FOR EMT TRACKER (VERSY SYNC BY ID)
+ * Pastikan Spreadsheet Anda memiliki header berikut di Baris 1:
+ * [ id, email, project, panelName, panelCode, jobSection, startTime, endTime, totalTime, timestamp ]
+ */
+
+function doGet() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var json = [];
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headers[j]] = data[i][j];
+    }
+    // Hanya masukkan data yang punya ID valid ke JSON output
+    if (obj.id && obj.id.toString().trim() !== "") {
+      json.push(obj);
+    }
+  }
+  return ContentService.createTextOutput(JSON.stringify(json)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var content = JSON.parse(e.postData.contents);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var action = content.cloudAction;
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+
+  // Cari index kolom "id" secara dinamis di header
+  var idColIndex = -1;
+  for (var k = 0; k < headers.length; k++) {
+    if (headers[k].toString().toLowerCase() === 'id') {
+      idColIndex = k;
+      break;
+    }
+  }
+
+  if (action === 'delete') {
+    if (idColIndex === -1) return ContentService.createTextOutput("Error: No ID column");
+    // Cari dari bawah ke atas untuk menghindari geseran index saat hapus
+    for (var i = data.length - 1; i >= 1; i--) {
+      if (data[i][idColIndex].toString() === content.id.toString()) {
+        sheet.deleteRow(i + 1);
+      }
+    }
+  } else if (action === 'clearAll') {
+    if (sheet.getLastRow() > 1) {
+      sheet.deleteRows(2, sheet.getLastRow() - 1);
+    }
+  } else if (action === 'update') {
+    if (idColIndex === -1) return ContentService.createTextOutput("Error: No ID column");
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][idColIndex].toString() === content.id.toString()) {
+        var rowValues = headers.map(h => content[h] !== undefined ? content[h] : "");
+        sheet.getRange(i + 1, 1, 1, headers.length).setValues([rowValues]);
+        break; // Stop setelah ketemu dan update
+      }
+    }
+  } else { // action: create
+    var rowValues = headers.map(h => content[h] !== undefined ? content[h] : "");
+    sheet.appendRow(rowValues);
+  }
+  
+  return ContentService.createTextOutput("Success");
+}`;
+
+  const handleCopyGas = () => {
+    navigator.clipboard.writeText(gasCode);
+    alert("Kode Google Script Sinkron ID berhasil disalin!");
+  };
+
   const testConnection = async () => {
-    if (!settings.scriptUrl) return alert("URL Master Database belum diatur di constants.ts");
+    if (!settings.scriptUrl) return alert("URL Master Database belum diatur");
     setIsTesting(true);
     try {
       const res = await fetch(settings.scriptUrl);
       if (res.ok || res.type === 'opaque') {
-        alert("✅ KONEKSI GLOBAL AKTIF!\nSemua user saat ini menggunakan URL ini.");
+        alert("✅ KONEKSI GLOBAL AKTIF!");
       } else {
-        alert("❌ KONEKSI GAGAL\nPastikan URL di constants.ts benar dan akses disetel ke 'Anyone'.");
+        alert("❌ KONEKSI GAGAL");
       }
     } catch (e) {
-      alert("⚠️ INFO KONEKSI:\nJika Anda sudah menyetel Google Script ke 'Anyone', data akan terkirim otomatis.");
+      alert("⚠️ INFO: Pastikan Google Script disetel ke 'Anyone'.");
     } finally {
       setIsTesting(false);
     }
@@ -42,8 +117,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
 
   const handleAddProject = () => {
     if (!newItem.trim()) return;
-    const updated = { ...settings, projects: [...projects, { name: newItem, panels: [] }] };
-    onUpdateSettings(updated);
+    onUpdateSettings({ ...settings, projects: [...projects, { name: newItem, panels: [] }] });
     setNewItem('');
   };
 
@@ -64,27 +138,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
   };
 
   const handleAddAdmin = () => {
-    if (!isSuperAdmin) return;
-    if (!newAdmin.trim() || !newAdmin.includes('@')) return;
-    if (adminEmails.some(a => a.toLowerCase() === newAdmin.toLowerCase())) {
-      alert('Email ini sudah menjadi admin.');
-      return;
-    }
-    const updated = { ...settings, adminEmails: [...adminEmails, newAdmin] };
-    onUpdateSettings(updated);
+    if (!isSuperAdmin || !newAdmin.trim() || !newAdmin.includes('@')) return;
+    onUpdateSettings({ ...settings, adminEmails: [...adminEmails, newAdmin] });
     setNewAdmin('');
   };
 
   const removeAdmin = (email: string) => {
-    if (!isSuperAdmin) return;
-    if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return;
-    const updated = { ...settings, adminEmails: adminEmails.filter(a => a !== email) };
-    onUpdateSettings(updated);
+    if (!isSuperAdmin || email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return;
+    onUpdateSettings({ ...settings, adminEmails: adminEmails.filter(a => a !== email) });
   };
 
   return (
     <div className="space-y-10 pb-24">
-      {/* GLOBAL DATABASE CONFIGURATION (SUPER ADMIN ONLY) */}
       <div className="bg-white rounded-[2rem] shadow-xl border-4 border-blue-500/10 overflow-hidden">
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6 text-white">
           <div className="flex items-center justify-between">
@@ -94,61 +159,57 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
               </div>
               <div>
                 <h3 className="font-black uppercase tracking-widest text-lg">Master Connection Settings</h3>
-                <p className="text-blue-100 text-xs">Pusat Data Google Sheets EMT</p>
               </div>
             </div>
             {isSuperAdmin && (
-              <button 
-                onClick={testConnection}
-                disabled={isTesting}
-                className="bg-white text-blue-600 px-6 py-2 rounded-xl text-sm font-black hover:bg-blue-50 transition-all shadow-lg active:scale-95"
-              >
+              <button onClick={testConnection} disabled={isTesting} className="bg-white text-blue-600 px-6 py-2 rounded-xl text-sm font-black hover:bg-blue-50">
                 {isTesting ? 'Mengecek...' : 'Uji Master'}
               </button>
             )}
           </div>
         </div>
         
-        <div className="p-8">
+        <div className="p-8 space-y-6">
           <div className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-              <div>
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Status Sinkronisasi Tim:</span>
-                <div className={`inline-flex items-center space-x-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tighter ${settings.scriptUrl ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                   <span className={`w-2 h-2 rounded-full ${settings.scriptUrl ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
-                   <span>{settings.scriptUrl ? 'SYSTEM-WIDE CONNECTED' : 'SYSTEM-WIDE DISCONNECTED'}</span>
-                </div>
-              </div>
-              
-              {isSuperAdmin && (
-                <div className="text-right">
-                  <span className="text-[9px] text-slate-400 font-bold block">Update Terakhir:</span>
-                  <span className="text-[10px] font-bold text-slate-600">{settings.scriptUrl ? 'Sync Otomatis Aktif' : 'N/A'}</span>
-                </div>
-              )}
-            </div>
+            <p className="text-xs font-bold text-slate-500 mb-4 leading-relaxed">
+              <strong>PENTING:</strong> Agar aksi Hapus dan Edit tersinkron ke Spreadsheet, Anda wajib memperbarui kode Google Apps Script ke versi ID-Sync.
+            </p>
             
-            <div className="p-4 bg-white rounded-xl border border-slate-200 font-mono text-[10px] text-slate-500 break-all shadow-inner mb-4">
-              {settings.scriptUrl || '⚠️ Belum ada URL database di file constants.ts'}
-            </div>
+            <button 
+              onClick={() => setShowGasCode(!showGasCode)}
+              className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl font-bold text-xs border border-blue-200 mb-4"
+            >
+              {showGasCode ? 'Sembunyikan Instruksi' : 'Lihat Kode Script ID-Sync (Wajib Update)'}
+            </button>
 
-            {isSuperAdmin ? (
-              <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100">
-                <p className="text-[11px] text-blue-700 font-bold leading-relaxed">
-                  📢 <strong>PENTING:</strong> Untuk menghubungkan semua teknisi ke satu database secara otomatis, Anda <strong>WAJIB</strong> memasukkan URL Google Apps Script ke dalam file <code>constants.ts</code> pada variabel <code>INITIAL_SETTINGS.scriptUrl</code>. <br/><br/>
-                  Setelah Anda melakukan perubahan di file tersebut, aplikasi akan otomatis mendeteksi URL baru di perangkat semua teknisi yang membuka aplikasi ini.
-                </p>
-              </div>
-            ) : (
-              <div className="bg-slate-100 p-4 rounded-xl text-center">
-                 <p className="text-xs text-slate-500 font-medium italic">Konfigurasi ini dikelola secara terpusat oleh Super Admin.</p>
+            {showGasCode && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                  <p className="text-[10px] text-amber-700 font-bold uppercase mb-2">Header Spreadsheet (Kolom A wajib 'id'):</p>
+                  <div className="bg-white p-2 rounded border border-amber-200 font-mono text-[9px] text-slate-600 overflow-x-auto whitespace-nowrap">
+                    id | email | project | panelName | panelCode | jobSection | startTime | endTime | totalTime | timestamp
+                  </div>
+                </div>
+                
+                <div className="relative">
+                  <textarea 
+                    readOnly 
+                    className="w-full h-48 p-4 bg-slate-900 text-emerald-400 font-mono text-[9px] rounded-xl outline-none"
+                    value={gasCode}
+                  />
+                  <button 
+                    onClick={handleCopyGas}
+                    className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-lg text-[10px] font-bold"
+                  >
+                    Salin Kode ID-Sync
+                  </button>
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* ADMINS SECTION */}
       {isSuperAdmin && (
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="bg-slate-900 px-6 py-4 text-white flex justify-between items-center">
@@ -156,21 +217,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
           </div>
           <div className="p-6">
             <div className="flex space-x-3 mb-6">
-              <input 
-                type="email"
-                className="flex-1 px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                placeholder="Email Gmail admin baru..."
-                value={newAdmin}
-                onChange={(e) => setNewAdmin(e.target.value)}
-              />
-              <button onClick={handleAddAdmin} className="px-6 py-2 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-700 transition-colors">Tambah</button>
+              <input type="email" className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-sm" placeholder="Email admin baru..." value={newAdmin} onChange={(e) => setNewAdmin(e.target.value)} />
+              <button onClick={handleAddAdmin} className="px-6 py-2 bg-slate-800 text-white rounded-xl font-bold text-sm">Tambah</button>
             </div>
             <div className="flex flex-wrap gap-2">
               {adminEmails.map((email, i) => (
                 <div key={i} className="flex items-center space-x-2 px-3 py-2 bg-slate-100 rounded-xl border border-slate-200">
                   <span className="text-xs font-bold text-slate-700">{email}</span>
                   {email.toLowerCase() !== ADMIN_EMAIL.toLowerCase() && (
-                    <button onClick={() => removeAdmin(email)} className="text-slate-400 hover:text-red-500 font-black px-1 transition-colors">×</button>
+                    <button onClick={() => removeAdmin(email)} className="text-slate-400 hover:text-red-500 font-black">×</button>
                   )}
                 </div>
               ))}
@@ -179,56 +234,52 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
         </div>
       )}
 
-      {/* DROPDOWN CONFIG */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Step 1: Project */}
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="bg-slate-800 px-4 py-3 text-white font-black text-[10px] uppercase tracking-widest text-center">Step 1: Project</div>
           <div className="p-4 border-b border-slate-100">
             <div className="flex space-x-1">
               <input type="text" className="flex-1 px-3 py-2 text-sm rounded-xl border outline-none bg-slate-50" placeholder="Nama Project..." value={selectedProjectId === null ? newItem : ''} onChange={(e) => selectedProjectId === null && setNewItem(e.target.value)} onFocus={() => {setSelectedProjectId(null); setSelectedPanelId(null);}} />
-              <button onClick={handleAddProject} className="bg-blue-600 text-white px-4 rounded-xl font-bold hover:bg-blue-700 transition-colors">+</button>
+              <button onClick={handleAddProject} className="bg-blue-600 text-white px-4 rounded-xl font-bold">+</button>
             </div>
           </div>
           <div className="max-h-[300px] overflow-y-auto">
             {projects.map((p, i) => (
-              <div key={i} onClick={() => {setSelectedProjectId(i); setSelectedPanelId(null);}} className={`p-4 text-sm flex justify-between cursor-pointer transition-all ${selectedProjectId === i ? 'bg-blue-50 text-blue-700 font-black border-r-4 border-blue-600' : 'hover:bg-slate-50 text-slate-600'}`}>
+              <div key={i} onClick={() => {setSelectedProjectId(i); setSelectedPanelId(null);}} className={`p-4 text-sm flex justify-between cursor-pointer ${selectedProjectId === i ? 'bg-blue-50 text-blue-700 font-black border-r-4 border-blue-600' : 'hover:bg-slate-50 text-slate-600'}`}>
                 <span>{p.name}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Step 2: Panel */}
-        <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden transition-opacity ${selectedProjectId === null ? 'opacity-40 pointer-events-none' : ''}`}>
+        <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden ${selectedProjectId === null ? 'opacity-40' : ''}`}>
           <div className="bg-slate-700 px-4 py-3 text-white font-black text-[10px] uppercase tracking-widest text-center">Step 2: Panel</div>
           <div className="p-4 border-b border-slate-100">
             <div className="flex space-x-1">
               <input type="text" className="flex-1 px-3 py-2 text-sm rounded-xl border outline-none bg-slate-50" placeholder="Nama Panel..." value={selectedProjectId !== null && selectedPanelId === null ? newItem : ''} onChange={(e) => selectedProjectId !== null && selectedPanelId === null && setNewItem(e.target.value)} onFocus={() => setSelectedPanelId(null)} />
-              <button onClick={handleAddPanel} className="bg-blue-600 text-white px-4 rounded-xl font-bold hover:bg-blue-700 transition-colors">+</button>
+              <button onClick={handleAddPanel} className="bg-blue-600 text-white px-4 rounded-xl font-bold">+</button>
             </div>
           </div>
           <div className="max-h-[300px] overflow-y-auto">
             {currentProject?.panels.map((p, i) => (
-              <div key={i} onClick={() => setSelectedPanelId(i)} className={`p-4 text-sm flex justify-between cursor-pointer transition-all ${selectedPanelId === i ? 'bg-blue-50 text-blue-700 font-black border-r-4 border-blue-600' : 'hover:bg-slate-50 text-slate-600'}`}>
+              <div key={i} onClick={() => setSelectedPanelId(i)} className={`p-4 text-sm flex justify-between cursor-pointer ${selectedPanelId === i ? 'bg-blue-50 text-blue-700 font-black border-r-4 border-blue-600' : 'hover:bg-slate-50 text-slate-600'}`}>
                 <span>{p.name}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Step 3: Kode */}
-        <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden transition-opacity ${selectedPanelId === null ? 'opacity-40 pointer-events-none' : ''}`}>
+        <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden ${selectedPanelId === null ? 'opacity-40' : ''}`}>
           <div className="bg-slate-600 px-4 py-3 text-white font-black text-[10px] uppercase tracking-widest text-center">Step 3: Kode</div>
           <div className="p-4 border-b border-slate-100">
             <div className="flex space-x-1">
               <input type="text" className="flex-1 px-3 py-2 text-sm rounded-xl border outline-none bg-slate-50" placeholder="Kode Unik..." value={selectedPanelId !== null ? newItem : ''} onChange={(e) => selectedPanelId !== null && setNewItem(e.target.value)} />
-              <button onClick={handleAddCode} className="bg-blue-600 text-white px-4 rounded-xl font-bold hover:bg-blue-700 transition-colors">+</button>
+              <button onClick={handleAddCode} className="bg-blue-600 text-white px-4 rounded-xl font-bold">+</button>
             </div>
           </div>
           <div className="max-h-[300px] overflow-y-auto p-2">
             {currentPanel?.codes.map((c, i) => (
-              <div key={i} className="p-3 text-xs bg-slate-50 rounded-lg mb-1 text-slate-700 font-mono border border-slate-100 shadow-sm">{c}</div>
+              <div key={i} className="p-3 text-xs bg-slate-50 rounded-lg mb-1 text-slate-700 font-mono border border-slate-100">{c}</div>
             ))}
           </div>
         </div>

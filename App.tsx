@@ -11,7 +11,6 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { ShareModal } from './components/ShareModal';
 import { EditLogModal } from './components/EditLogModal';
 import { ConfirmDeleteModal } from './components/ConfirmDeleteModal';
-import { GoogleGenAI } from "@google/genai";
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
@@ -33,6 +32,11 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('emt_deleted_ids');
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  });
+
   const [state, setState] = useState<AppState>({
     currentStep: 'input',
     activeLog: null
@@ -40,12 +44,10 @@ const App: React.FC = () => {
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
-  const [insight, setInsight] = useState<string | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [editingLog, setEditingLog] = useState<TimeLog | null>(null);
   
-  // Delete Confirmation States
   const [deleteConfig, setDeleteConfig] = useState<{
     isOpen: boolean;
     type: 'single' | 'all';
@@ -53,10 +55,8 @@ const App: React.FC = () => {
   }>({ isOpen: false, type: 'single' });
 
   useEffect(() => {
-    if (INITIAL_SETTINGS.scriptUrl && settings.scriptUrl !== INITIAL_SETTINGS.scriptUrl) {
-      setSettings(prev => ({ ...prev, scriptUrl: INITIAL_SETTINGS.scriptUrl }));
-    }
-  }, [settings.scriptUrl]);
+    localStorage.setItem('emt_deleted_ids', JSON.stringify(Array.from(deletedIds)));
+  }, [deletedIds]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
@@ -66,18 +66,6 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
   }, [history]);
 
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-      const isAdmin = settings.adminEmails.some(a => a.toLowerCase() === user.email.toLowerCase()) || user.email === ADMIN_EMAIL;
-      if (!isAdmin && (state.currentStep === 'history' || state.currentStep === 'settings')) {
-        setState(prev => ({ ...prev, currentStep: 'input' }));
-      }
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.USER);
-    }
-  }, [user, state.currentStep, settings.adminEmails]);
-
   const refreshFromCloud = useCallback(async (silent = false) => {
     if (!settings.scriptUrl) return;
     if (!silent) setIsSyncing(true);
@@ -85,16 +73,21 @@ const App: React.FC = () => {
       const response = await fetch(settings.scriptUrl);
       const data = await response.json();
       if (Array.isArray(data)) {
-        setHistory(data);
+        // FILTER KETAT: 1. Harus ada ID, 2. ID tidak ada di blacklist lokal (sudah dihapus)
+        const filteredData = data.filter((log: TimeLog) => 
+          log && log.id && 
+          String(log.id).trim() !== '' && 
+          !deletedIds.has(String(log.id))
+        );
+        setHistory(filteredData);
         setLastSyncTime(new Date().toLocaleTimeString());
       }
     } catch (err) {
       console.error("Cloud Sync Error:", err);
-      if (!silent) alert("Gagal mengambil data dari Google Sheets.");
     } finally {
       if (!silent) setIsSyncing(false);
     }
-  }, [settings.scriptUrl]);
+  }, [settings.scriptUrl, deletedIds]);
 
   useEffect(() => {
     if (state.currentStep === 'history') {
@@ -106,17 +99,20 @@ const App: React.FC = () => {
     if (!settings.scriptUrl) return;
     setIsSyncing(true);
     try {
+      const payload = { ...log, cloudAction: action };
       await fetch(settings.scriptUrl, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...log, cloudAction: action })
+        body: JSON.stringify(payload)
       });
-      setTimeout(() => refreshFromCloud(true), 2000);
+      // Beri jeda sedikit agar Google Sheets selesai menulis sebelum refresh
+      const delay = (action === 'delete' || action === 'clearAll') ? 7000 : 3000;
+      setTimeout(() => refreshFromCloud(true), delay);
     } catch (err) {
       console.error("Cloud Push Error:", err);
     } finally {
-      setTimeout(() => setIsSyncing(false), 1000);
+      setTimeout(() => setIsSyncing(false), 2000);
     }
   };
 
@@ -155,8 +151,7 @@ const App: React.FC = () => {
       activeLog: {
         ...prev.activeLog,
         isPaused: true,
-        accumulatedMs: (prev.activeLog?.accumulatedMs || 0) + sessionMs,
-        startTime: undefined 
+        accumulatedMs: (prev.activeLog?.accumulatedMs || 0) + sessionMs
       }
     }));
   };
@@ -193,24 +188,28 @@ const App: React.FC = () => {
   const handleUpdateLog = async (updatedLog: TimeLog) => {
     setHistory(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log));
     setEditingLog(null);
+    // Sinkronkan ke database menggunakan ID
     await pushToCloud(updatedLog, 'update');
   };
 
-  // NEW: Refined delete handlers using custom modal
   const confirmDeleteLog = (id: string) => {
     setDeleteConfig({ isOpen: true, type: 'single', targetId: id });
   };
 
-  const confirmDeleteAll = () => {
-    setDeleteConfig({ isOpen: true, type: 'all' });
-  };
-
   const executeDelete = async () => {
     if (deleteConfig.type === 'single' && deleteConfig.targetId) {
-      const logToDelete = history.find(l => l.id === deleteConfig.targetId);
-      setHistory(prev => prev.filter(log => log.id !== deleteConfig.targetId));
-      if (logToDelete) await pushToCloud(logToDelete, 'delete');
+      const idToDelete = deleteConfig.targetId;
+      setDeletedIds(prev => new Set(prev).add(idToDelete));
+      setHistory(prev => prev.filter(log => log.id !== idToDelete));
+      // Hapus baris di Google Sheets yang memiliki ID ini
+      await pushToCloud({ id: idToDelete }, 'delete');
     } else if (deleteConfig.type === 'all') {
+      const allIds = history.map(h => h.id);
+      setDeletedIds(prev => {
+        const next = new Set(prev);
+        allIds.forEach(id => next.add(id));
+        return next;
+      });
       setHistory([]);
       await pushToCloud({}, 'clearAll');
     }
@@ -245,7 +244,7 @@ const App: React.FC = () => {
                 {state.currentStep === 'settings' && 'Konfigurasi Sistem'}
               </h1>
               <p className="text-slate-500 mt-1 text-sm">
-                EMT Time Keeper v2.0 {isAdmin && <span className="text-blue-600 font-bold ml-1">• Mode Admin Aktif</span>}
+                EMT Time Keeper v2.2 {isAdmin && <span className="text-blue-600 font-bold ml-1">• Mode Admin Aktif</span>}
               </p>
             </div>
           </div>
@@ -280,7 +279,7 @@ const App: React.FC = () => {
             <ActiveTracker activeLog={state.activeLog} onStop={stopTracking} onPause={handlePause} onResume={handleResume} isCloudEnabled={!!settings.scriptUrl} />
           )}
           {state.currentStep === 'history' && isAdmin && (
-            <HistoryTable history={history} onEdit={setEditingLog} onDelete={confirmDeleteLog} onDeleteAll={confirmDeleteAll} isSyncing={isSyncing} />
+            <HistoryTable history={history} onEdit={setEditingLog} onDelete={confirmDeleteLog} onDeleteAll={() => setDeleteConfig({ isOpen: true, type: 'all' })} isSyncing={isSyncing} />
           )}
           {state.currentStep === 'settings' && isAdmin && (
             <SettingsPanel settings={settings} onUpdateSettings={setSettings} currentUserEmail={user.email} />

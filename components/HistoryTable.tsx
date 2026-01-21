@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { TimeLog } from '../types';
 
 interface HistoryTableProps {
@@ -13,25 +13,32 @@ interface HistoryTableProps {
 export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onDelete, onDeleteAll, isSyncing }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredHistory = history.filter(log => 
-    log.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    log.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    log.panelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    log.panelCode.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredHistory = useMemo(() => {
+    return history.filter(log => {
+      const s = searchTerm.toLowerCase();
+      return (
+        (log.id?.toString().toLowerCase().includes(s)) ||
+        (log.email?.toLowerCase().includes(s)) ||
+        (log.project?.toLowerCase().includes(s)) ||
+        (log.panelName?.toLowerCase().includes(s)) ||
+        (log.panelCode?.toLowerCase().includes(s))
+      );
+    });
+  }, [history, searchTerm]);
 
   const exportToCSV = () => {
-    const headers = ['Worker', 'Project', 'Panel', 'Code', 'Job Section', 'Start', 'End', 'Duration', 'Date'];
+    const headers = ['ID', 'Worker', 'Project', 'Panel', 'Code', 'Job Section', 'Start', 'End', 'Duration', 'Date'];
     const rows = filteredHistory.map(log => [
-      log.email,
-      log.project,
-      log.panelName,
-      log.panelCode,
-      log.jobSection,
-      new Date(log.startTime).toLocaleString(),
-      new Date(log.endTime).toLocaleString(),
-      log.totalTime,
-      new Date(log.timestamp).toLocaleDateString()
+      log.id || '',
+      log.email || '',
+      log.project || '',
+      log.panelName || '',
+      log.panelCode || '',
+      log.jobSection || '',
+      log.startTime ? new Date(log.startTime).toLocaleString() : '',
+      log.endTime ? new Date(log.endTime).toLocaleString() : '',
+      log.totalTime || '',
+      log.timestamp ? new Date(log.timestamp).toLocaleDateString() : ''
     ]);
     
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -40,7 +47,7 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Master_EMT_Cloud_Sheet_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `Master_EMT_Sheet_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -48,7 +55,6 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
 
   return (
     <div className="space-y-6">
-      {/* Ringkasan Admin - Menghapus kartu Panel Selesai */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Logs</p>
@@ -59,11 +65,11 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
         </div>
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Workers Aktif</p>
-          <p className="text-3xl font-black text-blue-600 tracking-tighter">{new Set(history.map(h => h.email)).size}</p>
+          <p className="text-3xl font-black text-blue-600 tracking-tighter">{new Set(history.map(h => h.email || 'unknown')).size}</p>
         </div>
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Project Berjalan</p>
-          <p className="text-3xl font-black text-indigo-600 tracking-tighter">{new Set(history.map(h => h.project)).size}</p>
+          <p className="text-3xl font-black text-indigo-600 tracking-tighter">{new Set(history.map(h => h.project || 'none')).size}</p>
         </div>
       </div>
 
@@ -75,7 +81,7 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
             </svg>
             <input 
               type="text" 
-              placeholder="Cari worker, project, atau kode panel..." 
+              placeholder="Cari ID, worker, atau project..." 
               className="w-full pl-11 pr-4 py-2.5 text-sm bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -89,7 +95,7 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span>Syncing...</span>
+                <span>Syncing Cloud...</span>
               </div>
             )}
             
@@ -121,9 +127,10 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
+          <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-100">
+                <th className="p-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID Log</th>
                 <th className="p-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Worker</th>
                 <th className="p-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Project & Panel</th>
                 <th className="p-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pengerjaan</th>
@@ -135,7 +142,7 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
             <tbody className="divide-y divide-slate-100">
               {filteredHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-16 text-center text-slate-400 italic font-medium">
+                  <td colSpan={7} className="p-16 text-center text-slate-400 italic font-medium">
                     {isSyncing ? 'Menarik data dari Google Sheets...' : 'Belum ada data pengerjaan.'}
                   </td>
                 </tr>
@@ -143,33 +150,42 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
                 filteredHistory.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-50/80 transition-colors group">
                     <td className="p-5">
+                      <span className="font-mono text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
+                        {log.id}
+                      </span>
+                    </td>
+                    <td className="p-5">
                       <div className="flex items-center space-x-3">
                         <div className="w-9 h-9 bg-gradient-to-br from-slate-200 to-slate-300 rounded-full flex items-center justify-center text-[11px] font-black text-slate-600 border border-white shadow-sm">
-                          {log.email.charAt(0).toUpperCase()}
+                          {(log.email || '?').charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-slate-800 truncate max-w-[120px]">{log.email.split('@')[0]}</p>
-                          <p className="text-[10px] text-slate-400 font-medium">{log.email}</p>
+                          <p className="text-sm font-bold text-slate-800 truncate max-w-[120px]">{(log.email || 'Unknown').split('@')[0]}</p>
+                          <p className="text-[10px] text-slate-400 font-medium">{log.email || 'No Email'}</p>
                         </div>
                       </div>
                     </td>
                     <td className="p-5">
-                      <p className="text-xs font-black text-blue-600 uppercase tracking-tight">{log.project}</p>
-                      <p className="text-[11px] text-slate-600 font-semibold mt-0.5">{log.panelName} <span className="text-slate-400 font-mono">({log.panelCode})</span></p>
+                      <p className="text-xs font-black text-blue-600 uppercase tracking-tight">{log.project || 'No Project'}</p>
+                      <p className="text-[11px] text-slate-600 font-semibold mt-0.5">{log.panelName || 'No Panel'} <span className="text-slate-400 font-mono">({log.panelCode || '-'})</span></p>
                     </td>
                     <td className="p-5">
                       <span className="text-xs text-slate-600 bg-slate-100 px-2 py-1 rounded-lg border border-slate-200/50 italic">
-                        {log.jobSection}
+                        {log.jobSection || 'No Section'}
                       </span>
                     </td>
                     <td className="p-5">
                       <div className="text-[11px] text-slate-500 font-medium">
-                        <span className="block text-slate-700 font-bold">{new Date(log.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - {new Date(log.endTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                        <span className="text-[10px] text-slate-400">{new Date(log.timestamp).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})}</span>
+                        <span className="block text-slate-700 font-bold">
+                          {log.startTime ? new Date(log.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--:--'} - {log.endTime ? new Date(log.endTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--:--'}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {log.timestamp ? new Date(log.timestamp).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'}) : '-'}
+                        </span>
                       </div>
                     </td>
                     <td className="p-5 text-right">
-                      <span className="font-mono font-black text-slate-900 text-sm tracking-tighter">{log.totalTime}</span>
+                      <span className="font-mono font-black text-slate-900 text-sm tracking-tighter">{log.totalTime || '00:00:00'}</span>
                     </td>
                     <td className="p-5 text-center">
                       <div className="flex justify-center space-x-1.5 sm:opacity-0 group-hover:opacity-100 transition-opacity">
