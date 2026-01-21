@@ -245,10 +245,10 @@ function doPost(e) {
         </div>
       </div>
 
-      {/* DROPDOWN VARIABLE MANAGEMENT - AUTO ADJUSTING LAYOUT (h-fit) */}
+      {/* DROPDOWN VARIABLE MANAGEMENT - AUTO ADJUSTING LAYOUT (Full Expand) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* STEP 1: PROJECT */}
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-fit min-h-[200px] max-h-[600px] transition-all duration-300">
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-fit transition-all duration-300">
           <div className="bg-slate-800 px-4 py-3 text-white font-black text-[10px] uppercase tracking-widest text-center">Step 1: Project</div>
           <div className="p-4 border-b border-slate-100">
             <div className="flex space-x-1">
@@ -256,13 +256,13 @@ function doPost(e) {
               <button onClick={handleAddProject} className="bg-blue-600 text-white px-4 rounded-xl font-bold">+</button>
             </div>
           </div>
-          <div className="overflow-y-auto">
+          <div className="p-1">
             {projects.map((p, i) => (
-              <div key={i} onClick={() => {setSelectedProjectId(i); setSelectedPanelId(null);}} className={`group p-4 text-sm flex justify-between items-center cursor-pointer transition-colors ${selectedProjectId === i ? 'bg-blue-50 text-blue-700 font-black border-r-4 border-blue-600' : 'hover:bg-slate-50 text-slate-600 border-r-4 border-transparent'}`}>
+              <div key={i} onClick={() => {setSelectedProjectId(i); setSelectedPanelId(null);}} className={`group p-4 text-sm flex justify-between items-center cursor-pointer transition-colors rounded-xl m-1 ${selectedProjectId === i ? 'bg-blue-50 text-blue-700 font-black border-l-4 border-blue-600 shadow-sm' : 'hover:bg-slate-50 text-slate-600 border-l-4 border-transparent'}`}>
                 <span className="truncate pr-2">{p.name}</span>
                 <button 
                   onClick={(e) => triggerDelete('project', i, p.name, 'PERINGATAN: Semua panel & kode di dalamnya akan terhapus!', e)}
-                  className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+                  className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -275,7 +275,7 @@ function doPost(e) {
         </div>
 
         {/* STEP 2: PANEL */}
-        <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-fit min-h-[200px] max-h-[600px] transition-all duration-300 ${selectedProjectId === null ? 'opacity-40 pointer-events-none' : ''}`}>
+        <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-fit transition-all duration-300 ${selectedProjectId === null ? 'opacity-40 pointer-events-none' : ''}`}>
           <div className="bg-slate-700 px-4 py-3 text-white font-black text-[10px] uppercase tracking-widest text-center">Step 2: Panel</div>
           <div className="p-4 border-b border-slate-100">
             <div className="flex space-x-1">
@@ -283,13 +283,13 @@ function doPost(e) {
               <button onClick={handleAddPanel} className="bg-blue-600 text-white px-4 rounded-xl font-bold">+</button>
             </div>
           </div>
-          <div className="overflow-y-auto">
+          <div className="p-1">
             {currentProject?.panels.map((p, i) => (
-              <div key={i} onClick={() => setSelectedPanelId(i)} className={`group p-4 text-sm flex justify-between items-center cursor-pointer transition-colors ${selectedPanelId === i ? 'bg-blue-50 text-blue-700 font-black border-r-4 border-blue-600' : 'hover:bg-slate-50 text-slate-600 border-r-4 border-transparent'}`}>
+              <div key={i} onClick={() => setSelectedPanelId(i)} className={`group p-4 text-sm flex justify-between items-center cursor-pointer transition-colors rounded-xl m-1 ${selectedPanelId === i ? 'bg-blue-50 text-blue-700 font-black border-l-4 border-blue-600 shadow-sm' : 'hover:bg-slate-50 text-slate-600 border-l-4 border-transparent'}`}>
                 <span className="truncate pr-2">{p.name}</span>
                 <button 
                   onClick={(e) => triggerDelete('panel', i, p.name, 'Menghapus panel akan menghapus semua kode unik di dalamnya.', e)}
-                  className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+                  className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -307,7 +307,7 @@ function doPost(e) {
         </div>
 
         {/* STEP 3: KODE */}
-        <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-fit min-h-[200px] max-h-[600px] transition-all duration-300 ${selectedPanelId === null ? 'opacity-40 pointer-events-none' : ''}`}>
+        <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-fit transition-all duration-300 ${selectedPanelId === null ? 'opacity-40 pointer-events-none' : ''}`}>
           <div className="bg-slate-600 px-4 py-3 text-white font-black text-[10px] uppercase tracking-widest text-center">Step 3: Kode</div>
           <div className="p-4 border-b border-slate-100">
             <div className="flex space-x-1">
@@ -315,13 +315,13 @@ function doPost(e) {
               <button onClick={handleAddCode} className="bg-blue-600 text-white px-4 rounded-xl font-bold">+</button>
             </div>
           </div>
-          <div className="overflow-y-auto p-2 space-y-1">
+          <div className="p-3 space-y-1.5">
             {currentPanel?.codes.map((c, i) => (
-              <div key={i} className="group p-3 text-xs bg-slate-50 rounded-lg text-slate-700 font-mono border border-slate-100 flex justify-between items-center transition-all hover:bg-white hover:shadow-sm">
+              <div key={i} className="group p-3 text-xs bg-slate-50 rounded-xl text-slate-700 font-mono border border-slate-100 flex justify-between items-center transition-all hover:bg-white hover:shadow-sm">
                 <span>{c}</span>
                 <button 
                   onClick={(e) => triggerDelete('code', i, c, undefined, e)}
-                  className="text-slate-300 hover:text-red-600 p-1 rounded transition-colors opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+                  className="text-slate-300 hover:text-red-600 p-1 rounded transition-colors"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
