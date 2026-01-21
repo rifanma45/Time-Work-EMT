@@ -170,8 +170,9 @@ const App: React.FC = () => {
     });
   }, []);
 
-  // DIUBAH: Langsung reset state tanpa window.confirm (konfirmasi ditangani di komponen)
   const handleCancelTracking = useCallback(() => {
+    // Fungsi ini dipanggil dari ActiveTracker setelah konfirmasi selesai.
+    // Tugasnya: Langsung reset tampilan ke menu input tanpa menyimpan data.
     setState({
       currentStep: 'input',
       activeLog: null
