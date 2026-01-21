@@ -8,7 +8,7 @@ export const INITIAL_SETTINGS = {
    * Begitu diisi, SEMUA user yang membuka aplikasi ini akan otomatis 
    * terhubung ke database yang sama tanpa perlu setting lagi.
    */
-  scriptUrl: 'https://script.google.com/macros/s/AKfycbzQSgflsrxDXYOv3MfFpDgJqY2Tz8nsVAl9MROYYb6jkeTk2-btHh4E6KJRZ-hSPJIQ/exec', 
+  scriptUrl: 'https://script.google.com/macros/s/AKfycbxmx-zANMST-un3SmTk-sN7nFmzWtQwjtLSz360VSgmoZGOibmK4bgLmoydV0xcWb01/exec', 
   
   projects: [
     {

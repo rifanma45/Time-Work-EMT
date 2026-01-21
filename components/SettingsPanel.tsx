@@ -242,7 +242,7 @@ function doPost(e) {
         </div>
       </div>
 
-      {/* DROPDOWN VARIABLE MANAGEMENT - AUTO ADJUSTING LAYOUT */}
+      {/* DROPDOWN VARIABLE MANAGEMENT - AUTO ADJUSTING LAYOUT (h-fit) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* STEP 1: PROJECT */}
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-fit min-h-[200px] max-h-[600px] transition-all duration-300">

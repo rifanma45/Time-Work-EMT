@@ -21,7 +21,6 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     let currentSettings: Settings = saved ? JSON.parse(saved) : INITIAL_SETTINGS;
-    // Prioritaskan URL dari konstanta jika tersedia
     if (INITIAL_SETTINGS.scriptUrl && INITIAL_SETTINGS.scriptUrl.trim() !== '') {
       currentSettings.scriptUrl = INITIAL_SETTINGS.scriptUrl;
     }
@@ -52,6 +51,7 @@ const App: React.FC = () => {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [editingLog, setEditingLog] = useState<TimeLog | null>(null);
+  const [globalUpdateMessage, setGlobalUpdateMessage] = useState<string | null>(null);
   
   const [deleteConfig, setDeleteConfig] = useState<{
     isOpen: boolean;
@@ -59,14 +59,12 @@ const App: React.FC = () => {
     targetId?: string;
   }>({ isOpen: false, type: 'single' });
 
-  // Sinkronisasi Pengaturan Global (Dropdown List) dari Cloud
   const syncSettingsFromCloud = useCallback(async () => {
     if (!settings.scriptUrl) return;
     try {
-      // Kita memanggil URL dengan parameter khusus untuk mendapatkan settings
       const response = await fetch(`${settings.scriptUrl}?action=getSettings`);
       const data = await response.json();
-      if (data && data.projects) {
+      if (data && data.projects && Array.isArray(data.projects) && data.projects.length > 0) {
         setSettings(prev => {
           const newSettings = { ...prev, projects: data.projects };
           localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
@@ -79,7 +77,6 @@ const App: React.FC = () => {
     }
   }, [settings.scriptUrl]);
 
-  // Efek saat aplikasi pertama kali dijalankan
   useEffect(() => {
     syncSettingsFromCloud();
   }, [syncSettingsFromCloud]);
@@ -136,9 +133,13 @@ const App: React.FC = () => {
         body: JSON.stringify(payload)
       });
       
-      // Jika update settings, beri jeda sedikit lalu sync ulang
       if (action === 'updateGlobalSettings') {
-        setTimeout(() => syncSettingsFromCloud(), 2000);
+        setGlobalUpdateMessage("Menyiarkan pembaruan ke seluruh tim...");
+        setTimeout(() => {
+          syncSettingsFromCloud();
+          setGlobalUpdateMessage("List Project Berhasil Disinkronkan Secara Global!");
+          setTimeout(() => setGlobalUpdateMessage(null), 3000);
+        }, 2000);
       } else {
         const delay = (action === 'delete' || action === 'clearAll') ? 7000 : 3000;
         setTimeout(() => refreshFromCloud(true), delay);
@@ -152,20 +153,22 @@ const App: React.FC = () => {
 
   const handleUpdateSettings = (newSettings: Settings) => {
     setSettings(newSettings);
-    // Jika user adalah admin, push perubahan dropdown ke cloud agar user lain dapat melihatnya
-    const isAdmin = newSettings.adminEmails.some(a => a.toLowerCase() === user?.email.toLowerCase()) || user?.email === ADMIN_EMAIL;
-    if (isAdmin) {
+    const isAdminUser = newSettings.adminEmails.some(a => a.toLowerCase() === user?.email.toLowerCase()) || user?.email === ADMIN_EMAIL;
+    if (isAdminUser) {
       pushToCloud({ projects: newSettings.projects }, 'updateGlobalSettings');
     }
   };
 
   const handleLogin = (email: string) => {
-    const isAdmin = settings.adminEmails.some(admin => admin.toLowerCase() === email.toLowerCase()) || email === ADMIN_EMAIL;
-    setUser({ email, isAdmin });
+    const isAdminUser = settings.adminEmails.some(admin => admin.toLowerCase() === email.toLowerCase()) || email === ADMIN_EMAIL;
+    const newUser = { email, isAdmin: isAdminUser };
+    setUser(newUser);
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(newUser));
   };
 
   const handleLogout = () => {
     setUser(null);
+    localStorage.removeItem(STORAGE_KEYS.USER);
     setState({ currentStep: 'input', activeLog: null });
   };
 
@@ -283,6 +286,19 @@ const App: React.FC = () => {
         onClose={() => setIsSidebarOpen(false)}
       />
       <main className="flex-1 p-6 md:p-10 overflow-y-auto">
+        {/* GLOBAL SYNC NOTIFICATION */}
+        {globalUpdateMessage && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-4 duration-500">
+            <div className="bg-slate-900 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center space-x-3 border border-slate-700/50 backdrop-blur-md">
+              <div className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+              </div>
+              <span className="text-xs font-black uppercase tracking-widest">{globalUpdateMessage}</span>
+            </div>
+          </div>
+        )}
+
         <header className="mb-8 flex justify-between items-start">
           <div className="flex items-start space-x-3">
             <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 bg-white border border-slate-200 rounded-lg text-slate-600 shadow-sm">
@@ -296,7 +312,7 @@ const App: React.FC = () => {
                 {state.currentStep === 'settings' && 'Konfigurasi Sistem'}
               </h1>
               <p className="text-slate-500 mt-1 text-sm">
-                EMT Time Keeper v2.2 {isAdmin && <span className="text-blue-600 font-bold ml-1">• Mode Admin Aktif</span>}
+                EMT Time Keeper v2.5 {isAdmin && <span className="text-blue-600 font-bold ml-1">• Mode Admin Aktif</span>}
               </p>
             </div>
           </div>
