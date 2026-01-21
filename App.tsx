@@ -73,14 +73,13 @@ const App: React.FC = () => {
       const response = await fetch(settings.scriptUrl);
       const data = await response.json();
       if (Array.isArray(data)) {
-        // FILTER KETAT: 1. Harus ada ID, 2. ID tidak ada di blacklist lokal (sudah dihapus)
         const filteredData = data.filter((log: TimeLog) => 
           log && log.id && 
           String(log.id).trim() !== '' && 
           !deletedIds.has(String(log.id))
         );
         setHistory(filteredData);
-        setLastSyncTime(new Date().toLocaleTimeString());
+        setLastSyncTime(new Date().toLocaleTimeString([], { hour12: false }));
       }
     } catch (err) {
       console.error("Cloud Sync Error:", err);
@@ -106,7 +105,6 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      // Beri jeda sedikit agar Google Sheets selesai menulis sebelum refresh
       const delay = (action === 'delete' || action === 'clearAll') ? 7000 : 3000;
       setTimeout(() => refreshFromCloud(true), delay);
     } catch (err) {
@@ -141,32 +139,44 @@ const App: React.FC = () => {
     });
   };
 
-  const handlePause = () => {
-    if (!state.activeLog || state.activeLog.isPaused) return;
-    const now = new Date().getTime();
-    const start = new Date(state.activeLog.startTime!).getTime();
-    const sessionMs = now - start;
-    setState(prev => ({
-      ...prev,
-      activeLog: {
-        ...prev.activeLog,
-        isPaused: true,
-        accumulatedMs: (prev.activeLog?.accumulatedMs || 0) + sessionMs
-      }
-    }));
-  };
+  const handlePause = useCallback(() => {
+    setState(prev => {
+      if (!prev.activeLog || prev.activeLog.isPaused) return prev;
+      const now = new Date().getTime();
+      const start = new Date(prev.activeLog.startTime!).getTime();
+      const sessionMs = now - start;
+      return {
+        ...prev,
+        activeLog: {
+          ...prev.activeLog,
+          isPaused: true,
+          accumulatedMs: (prev.activeLog.accumulatedMs || 0) + sessionMs
+        }
+      };
+    });
+  }, []);
 
-  const handleResume = () => {
-    if (!state.activeLog || !state.activeLog.isPaused) return;
-    setState(prev => ({
-      ...prev,
-      activeLog: {
-        ...prev.activeLog,
-        isPaused: false,
-        startTime: new Date().toISOString()
-      }
-    }));
-  };
+  const handleResume = useCallback(() => {
+    setState(prev => {
+      if (!prev.activeLog || !prev.activeLog.isPaused) return prev;
+      return {
+        ...prev,
+        activeLog: {
+          ...prev.activeLog,
+          isPaused: false,
+          startTime: new Date().toISOString()
+        }
+      };
+    });
+  }, []);
+
+  // DIUBAH: Langsung reset state tanpa window.confirm (konfirmasi ditangani di komponen)
+  const handleCancelTracking = useCallback(() => {
+    setState({
+      currentStep: 'input',
+      activeLog: null
+    });
+  }, []);
 
   const stopTracking = async (endTime: string, totalTime: string) => {
     if (!state.activeLog) return;
@@ -188,7 +198,6 @@ const App: React.FC = () => {
   const handleUpdateLog = async (updatedLog: TimeLog) => {
     setHistory(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log));
     setEditingLog(null);
-    // Sinkronkan ke database menggunakan ID
     await pushToCloud(updatedLog, 'update');
   };
 
@@ -201,7 +210,6 @@ const App: React.FC = () => {
       const idToDelete = deleteConfig.targetId;
       setDeletedIds(prev => new Set(prev).add(idToDelete));
       setHistory(prev => prev.filter(log => log.id !== idToDelete));
-      // Hapus baris di Google Sheets yang memiliki ID ini
       await pushToCloud({ id: idToDelete }, 'delete');
     } else if (deleteConfig.type === 'all') {
       const allIds = history.map(h => h.id);
@@ -276,7 +284,14 @@ const App: React.FC = () => {
         <div className="max-w-6xl mx-auto">
           {state.currentStep === 'input' && <InputForm settings={settings} onStart={startTracking} />}
           {state.currentStep === 'active' && state.activeLog && (
-            <ActiveTracker activeLog={state.activeLog} onStop={stopTracking} onPause={handlePause} onResume={handleResume} isCloudEnabled={!!settings.scriptUrl} />
+            <ActiveTracker 
+              activeLog={state.activeLog} 
+              onStop={stopTracking} 
+              onPause={handlePause} 
+              onResume={handleResume} 
+              onCancel={handleCancelTracking}
+              isCloudEnabled={!!settings.scriptUrl} 
+            />
           )}
           {state.currentStep === 'history' && isAdmin && (
             <HistoryTable history={history} onEdit={setEditingLog} onDelete={confirmDeleteLog} onDeleteAll={() => setDeleteConfig({ isOpen: true, type: 'all' })} isSyncing={isSyncing} />

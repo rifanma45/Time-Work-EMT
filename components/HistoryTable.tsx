@@ -55,7 +55,7 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Logs</p>
           <div className="flex items-center space-x-2">
@@ -66,10 +66,6 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Workers Aktif</p>
           <p className="text-3xl font-black text-blue-600 tracking-tighter">{new Set(history.map(h => h.email || 'unknown')).size}</p>
-        </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Project Berjalan</p>
-          <p className="text-3xl font-black text-indigo-600 tracking-tighter">{new Set(history.map(h => h.project || 'none')).size}</p>
         </div>
       </div>
 
@@ -177,7 +173,7 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({ history, onEdit, onD
                     <td className="p-5">
                       <div className="text-[11px] text-slate-500 font-medium">
                         <span className="block text-slate-700 font-bold">
-                          {log.startTime ? new Date(log.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--:--'} - {log.endTime ? new Date(log.endTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--:--'}
+                          {log.startTime ? new Date(log.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: false}) : '--:--'} - {log.endTime ? new Date(log.endTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: false}) : '--:--'}
                         </span>
                         <span className="text-[10px] text-slate-400">
                           {log.timestamp ? new Date(log.timestamp).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'}) : '-'}
