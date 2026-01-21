@@ -21,6 +21,7 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
     let currentSettings: Settings = saved ? JSON.parse(saved) : INITIAL_SETTINGS;
+    // Prioritaskan URL dari konstanta jika tersedia
     if (INITIAL_SETTINGS.scriptUrl && INITIAL_SETTINGS.scriptUrl.trim() !== '') {
       currentSettings.scriptUrl = INITIAL_SETTINGS.scriptUrl;
     }
@@ -58,6 +59,31 @@ const App: React.FC = () => {
     targetId?: string;
   }>({ isOpen: false, type: 'single' });
 
+  // Sinkronisasi Pengaturan Global (Dropdown List) dari Cloud
+  const syncSettingsFromCloud = useCallback(async () => {
+    if (!settings.scriptUrl) return;
+    try {
+      // Kita memanggil URL dengan parameter khusus untuk mendapatkan settings
+      const response = await fetch(`${settings.scriptUrl}?action=getSettings`);
+      const data = await response.json();
+      if (data && data.projects) {
+        setSettings(prev => {
+          const newSettings = { ...prev, projects: data.projects };
+          localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
+          return newSettings;
+        });
+        console.log("Global Settings Updated from Cloud");
+      }
+    } catch (err) {
+      console.error("Failed to sync global settings:", err);
+    }
+  }, [settings.scriptUrl]);
+
+  // Efek saat aplikasi pertama kali dijalankan
+  useEffect(() => {
+    syncSettingsFromCloud();
+  }, [syncSettingsFromCloud]);
+
   useEffect(() => {
     localStorage.setItem('emt_deleted_ids', JSON.stringify(Array.from(deletedIds)));
   }, [deletedIds]);
@@ -77,7 +103,6 @@ const App: React.FC = () => {
       const response = await fetch(settings.scriptUrl);
       const data = await response.json();
       if (Array.isArray(data)) {
-        // Validasi ketat untuk menghindari error rendering
         const filteredData = data.filter((log: any) => 
           log && log.id && 
           String(log.id).trim() !== '' && 
@@ -99,7 +124,7 @@ const App: React.FC = () => {
     }
   }, [state.currentStep, refreshFromCloud]);
 
-  const pushToCloud = async (log: any, action: 'create' | 'update' | 'delete' | 'clearAll' = 'create') => {
+  const pushToCloud = async (log: any, action: 'create' | 'update' | 'delete' | 'clearAll' | 'updateGlobalSettings' = 'create') => {
     if (!settings.scriptUrl) return;
     setIsSyncing(true);
     try {
@@ -110,12 +135,27 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const delay = (action === 'delete' || action === 'clearAll') ? 7000 : 3000;
-      setTimeout(() => refreshFromCloud(true), delay);
+      
+      // Jika update settings, beri jeda sedikit lalu sync ulang
+      if (action === 'updateGlobalSettings') {
+        setTimeout(() => syncSettingsFromCloud(), 2000);
+      } else {
+        const delay = (action === 'delete' || action === 'clearAll') ? 7000 : 3000;
+        setTimeout(() => refreshFromCloud(true), delay);
+      }
     } catch (err) {
       console.error("Cloud Push Error:", err);
     } finally {
       setTimeout(() => setIsSyncing(false), 2000);
+    }
+  };
+
+  const handleUpdateSettings = (newSettings: Settings) => {
+    setSettings(newSettings);
+    // Jika user adalah admin, push perubahan dropdown ke cloud agar user lain dapat melihatnya
+    const isAdmin = newSettings.adminEmails.some(a => a.toLowerCase() === user?.email.toLowerCase()) || user?.email === ADMIN_EMAIL;
+    if (isAdmin) {
+      pushToCloud({ projects: newSettings.projects }, 'updateGlobalSettings');
     }
   };
 
@@ -301,7 +341,7 @@ const App: React.FC = () => {
             <HistoryTable history={history} onEdit={setEditingLog} onDelete={confirmDeleteLog} onDeleteAll={() => setDeleteConfig({ isOpen: true, type: 'all' })} isSyncing={isSyncing} />
           )}
           {state.currentStep === 'settings' && isAdmin && (
-            <SettingsPanel settings={settings} onUpdateSettings={setSettings} currentUserEmail={user.email} />
+            <SettingsPanel settings={settings} onUpdateSettings={handleUpdateSettings} currentUserEmail={user.email} />
           )}
         </div>
       </main>

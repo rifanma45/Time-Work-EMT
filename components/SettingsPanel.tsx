@@ -36,10 +36,26 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
   const isSuperAdmin = currentUserEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
   const gasCode = `/**
- * GOOGLE APPS SCRIPT FOR EMT TRACKER (VERSY SYNC BY ID)
+ * GOOGLE APPS SCRIPT FOR EMT TRACKER (FULL SYNC v3.0)
+ * Update kode ini di Google Apps Script untuk mendukung Sinkronisasi Dropdown Global.
  */
-function doGet() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+
+function doGet(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var action = e.parameter.action;
+  
+  // Ambil Pengaturan Global (Dropdown List)
+  if (action === 'getSettings') {
+    var configSheet = ss.getSheetByName('AppConfig');
+    if (!configSheet) {
+      return ContentService.createTextOutput(JSON.stringify({projects: []})).setMimeType(ContentService.MimeType.JSON);
+    }
+    var configData = configSheet.getRange(1, 1).getValue();
+    return ContentService.createTextOutput(configData).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Ambil Data Log History (Default)
+  var sheet = ss.getActiveSheet();
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
   var json = [];
@@ -57,8 +73,21 @@ function doGet() {
 
 function doPost(e) {
   var content = JSON.parse(e.postData.contents);
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
   var action = content.cloudAction;
+
+  // UPDATE GLOBAL SETTINGS (DROPDOWN)
+  if (action === 'updateGlobalSettings') {
+    var configSheet = ss.getSheetByName('AppConfig');
+    if (!configSheet) {
+      configSheet = ss.insertSheet('AppConfig');
+    }
+    configSheet.getRange(1, 1).setValue(JSON.stringify({ projects: content.projects }));
+    return ContentService.createTextOutput("Settings Updated");
+  }
+
+  // STANDARD LOG ACTIONS
+  var sheet = ss.getActiveSheet();
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
   var idColIndex = headers.indexOf('id');
@@ -79,7 +108,7 @@ function doPost(e) {
         break;
       }
     }
-  } else {
+  } else { // create
     var rowValues = headers.map(h => content[h] !== undefined ? content[h] : "");
     sheet.appendRow(rowValues);
   }
@@ -108,7 +137,6 @@ function doPost(e) {
     setNewItem('');
   };
 
-  // Open confirmation modal instead of immediate delete
   const triggerDelete = (type: DeleteType, index: number, title: string, warning?: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setConfirmModal({ show: true, type, index, title, warning });
@@ -186,21 +214,29 @@ function doPost(e) {
               </div>
               <div>
                 <h3 className="font-black uppercase tracking-widest text-lg">Master Connection</h3>
+                <p className="text-[10px] opacity-70 font-bold">Pembaruan Dropdown akan disinkronkan secara Global</p>
               </div>
             </div>
           </div>
         </div>
         <div className="p-8">
+           <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 mb-6">
+             <p className="text-xs text-blue-800 font-medium">
+               <strong>Info:</strong> Agar perubahan dropdown tersinkron ke semua pengguna, pastikan Anda sudah memperbarui 
+               <strong> Google Apps Script</strong> ke versi 3.0 menggunakan kode di bawah.
+             </p>
+           </div>
+           
            <button 
               onClick={() => setShowGasCode(!showGasCode)}
-              className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl font-bold text-xs border border-blue-200 mb-4"
+              className="w-full py-3 bg-white text-blue-600 rounded-xl font-bold text-xs border border-blue-200 mb-4 hover:bg-blue-50 transition-colors"
             >
-              {showGasCode ? 'Sembunyikan Kode' : 'Lihat Kode Script ID-Sync'}
+              {showGasCode ? 'Sembunyikan Kode Script' : 'Lihat Kode Script v3.0 (Wajib Update)'}
             </button>
             {showGasCode && (
-               <div className="relative">
-                  <textarea readOnly className="w-full h-32 p-4 bg-slate-900 text-emerald-400 font-mono text-[9px] rounded-xl outline-none" value={gasCode} />
-                  <button onClick={() => {navigator.clipboard.writeText(gasCode); alert("Salin Sukses!");}} className="absolute top-2 right-2 bg-white/10 text-white px-2 py-1 rounded text-[9px]">Salin</button>
+               <div className="relative animate-in slide-in-from-top-2 duration-300">
+                  <textarea readOnly className="w-full h-48 p-4 bg-slate-900 text-emerald-400 font-mono text-[9px] rounded-xl outline-none" value={gasCode} />
+                  <button onClick={() => {navigator.clipboard.writeText(gasCode); alert("Salin Sukses! Silakan deploy ulang di Google Apps Script.");}} className="absolute top-2 right-2 bg-white/10 text-white px-2 py-1 rounded text-[9px] hover:bg-white/20">Salin Kode</button>
                </div>
             )}
         </div>
