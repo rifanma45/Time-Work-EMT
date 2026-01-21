@@ -63,7 +63,15 @@ const App: React.FC = () => {
     if (!settings.scriptUrl) return;
     try {
       const response = await fetch(`${settings.scriptUrl}?action=getSettings`);
-      const data = await response.json();
+      const text = await response.text();
+      
+      // Handle empty response gracefully
+      if (!text || text.trim() === "") {
+        console.warn("Global settings response is empty from Cloud");
+        return;
+      }
+
+      const data = JSON.parse(text);
       if (data && data.projects && Array.isArray(data.projects) && data.projects.length > 0) {
         setSettings(prev => {
           const newSettings = { ...prev, projects: data.projects };
@@ -98,7 +106,14 @@ const App: React.FC = () => {
     if (!silent) setIsSyncing(true);
     try {
       const response = await fetch(settings.scriptUrl);
-      const data = await response.json();
+      const text = await response.text();
+      
+      if (!text || text.trim() === "") {
+        setHistory([]);
+        return;
+      }
+
+      const data = JSON.parse(text);
       if (Array.isArray(data)) {
         const filteredData = data.filter((log: any) => 
           log && log.id && 

@@ -36,7 +36,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onUpdate
   const isSuperAdmin = currentUserEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
   const gasCode = `/**
- * GOOGLE APPS SCRIPT FOR EMT TRACKER (FULL SYNC v3.0)
+ * GOOGLE APPS SCRIPT FOR EMT TRACKER (FULL SYNC v3.1)
  * Update kode ini di Google Apps Script untuk mendukung Sinkronisasi Dropdown Global.
  */
 
@@ -51,6 +51,9 @@ function doGet(e) {
       return ContentService.createTextOutput(JSON.stringify({projects: []})).setMimeType(ContentService.MimeType.JSON);
     }
     var configData = configSheet.getRange(1, 1).getValue();
+    if (!configData || configData.toString().trim() === "") {
+      return ContentService.createTextOutput(JSON.stringify({projects: []})).setMimeType(ContentService.MimeType.JSON);
+    }
     return ContentService.createTextOutput(configData).setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -223,7 +226,7 @@ function doPost(e) {
            <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 mb-6">
              <p className="text-xs text-blue-800 font-medium">
                <strong>Info:</strong> Agar perubahan dropdown tersinkron ke semua pengguna, pastikan Anda sudah memperbarui 
-               <strong> Google Apps Script</strong> ke versi 3.0 menggunakan kode di bawah.
+               <strong> Google Apps Script</strong> ke versi 3.1 menggunakan kode di bawah.
              </p>
            </div>
            
@@ -231,7 +234,7 @@ function doPost(e) {
               onClick={() => setShowGasCode(!showGasCode)}
               className="w-full py-3 bg-white text-blue-600 rounded-xl font-bold text-xs border border-blue-200 mb-4 hover:bg-blue-50 transition-colors"
             >
-              {showGasCode ? 'Sembunyikan Kode Script' : 'Lihat Kode Script v3.0 (Wajib Update)'}
+              {showGasCode ? 'Sembunyikan Kode Script' : 'Lihat Kode Script v3.1 (Wajib Update)'}
             </button>
             {showGasCode && (
                <div className="relative animate-in slide-in-from-top-2 duration-300">
